@@ -1,0 +1,14 @@
+-- iCamera Database Initial Data
+INSERT INTO system_settings (setting_name, setting_value) VALUES 
+('app_version', '1.0.0'),
+('max_cameras', '10'),
+('enable_hotfolder', 'true'),
+('log_level', 'INFO'),
+('backup_enabled', 'true');
+
+INSERT INTO camera_config (camera_name, camera_url) VALUES 
+('Default Camera 1', 'https://cctv4.tcsion.com/stream1'),
+('Default Camera 2', 'https://cctv8.tcsion.com/stream2');
+
+INSERT INTO installation_log (version, status) VALUES 
+('1.0.0', 'COMPLETED');

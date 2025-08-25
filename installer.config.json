@@ -1,0 +1,193 @@
+{
+  "metadata": {
+    "name": "iCamera Proxy Installer",
+    "version": "1.0.0",
+    "description": "GUI-based installer for iCamera Proxy configuration",
+    "author": "System Administrator",
+    "created": "2024-01-01",
+    "requiresAdmin": true
+  },
+  "installation": {
+    "totalSteps": 10,
+    "directoryName": "iCamera"
+  },
+  "ui": {
+    "windowTitle": "iCamera Proxy Installer",
+    "windowWidth": 500,
+    "windowHeight": 400,
+    "progressBarHeight": 20
+  },
+  "cleanup": {
+    "taskName": "iCameraProcessMonitor",
+    "folderName": "iCamera"
+  },
+  "requirements": {
+    "minimumRamGB": 4,
+    "minimumDiskSpaceGB": 2,
+    "connectivityUrls": [
+      "https://g01.tcsion.com",
+      "https://cctv4.tcsion.com",
+      "https://cctv8.tcsion.com"
+    ]
+  },
+  "dependencies": {
+    "searchFolders": [
+      ".",
+      "$env:USERPROFILE\\Downloads"
+    ],
+    "packages": {
+      "jre": {
+        "name": "Java Runtime Environment",
+        "filePattern": "*corretto*jre*.zip,*openjdk*8*.zip",
+        "supportedExtensions": [".zip"],
+        "downloadUrl": "https://corretto.aws/downloads/latest/amazon-corretto-8-x64-windows-jre.zip",
+        "sha256": "",
+        "targetSubfolder": "jre",
+        "localOnly": false,
+        "verifyExecutable": "bin\\java.exe",
+        "category": "runtime"
+      },
+      "hsqldb": {
+        "name": "HSQLDB",
+        "filePattern": "hsqldb*.zip",
+        "supportedExtensions": [".zip"],
+        "downloadUrl": "https://master.dl.sourceforge.net/project/hsqldb/hsqldb/hsqldb_2_3/hsqldb-2.3.4.zip?viasf=1",
+        "sha256": "C00547495CA8F1DE29CCBDD41965AB130ACBC616F32DCBE58B3AED16169C962E",
+        "targetSubfolder": "hsqldb",
+        "localOnly": false,
+        "verifyExecutable": "hsqldb\\lib\\hsqldb.jar",
+        "category": "database"
+      },
+      "procrun": {
+        "name": "Apache Commons Daemon",
+        "filePattern": "*daemon*.zip,*procrun*.zip",
+        "supportedExtensions": [".zip"],
+        "downloadUrl": "https://archive.apache.org/dist/commons/daemon/binaries/windows/commons-daemon-1.4.0-bin-windows.zip",
+        "sha256": "",
+        "targetSubfolder": "procrun",
+        "localOnly": false,
+        "verifyExecutable": "prunsrv.exe",
+        "category": "service"
+      },
+      "ffmpeg": {
+        "name": "FFmpeg Essentials",
+        "filePattern": "ffmpeg*.zip,ffmpeg*.7z",
+        "supportedExtensions": [".zip", ".7z"],
+        "downloadUrl": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z",
+        "sha256": "",
+        "targetSubfolder": "ffmpeg",
+        "localOnly": false,
+        "verifyExecutable": "bin\\ffmpeg.exe",
+        "category": "media"
+      },
+      "7zr": {
+        "name": "7-Zip Standalone",
+        "filePattern": "7zr.exe",
+        "supportedExtensions": [".exe"],
+        "downloadUrl": "https://www.7-zip.org/a/7zr.exe",
+        "sha256": "",
+        "targetSubfolder": "tools",
+        "localOnly": false,
+        "verifyExecutable": "7zr.exe",
+        "category": "tools"
+      }
+    }
+  },
+  "database": {
+    "defaultPort": 9001,
+    "portRange": {
+      "start": 9001,
+      "end": 9100
+    },
+    "name": "db0",
+    "username": "SA",
+    "password": "",
+    "memoryDbId": "mem",
+    "dataDirectory": "hsqldb/data",
+    "initScripts": [
+      "database-scripts/create.script",
+      "database-scripts/insert.script"
+    ],
+    "appScript": "CameraProxy.sql",
+    "queries": {
+      "installInfo": "SELECT CURRENT_TIMESTAMP as install_date;",
+      "fileCatalystCheck": "SELECT 'true' as install_hotfolder;"
+    }
+  },
+  "filecatalyst": {
+    "installerPattern": "*filecatalyst*hotfolder*.exe,install_fc_hotfolder.exe",
+    "downloadUrl": "https://filecatalyst.software/public/filecatalyst/Direct/4.0.0.375/Windows/install_fc_hotfolder.exe",
+    "settingsFile": "fc_hotfolder_settings.inf",
+    "saveInfCommand": "/SAVEINF",
+    "loadInfCommand": "/VERYSILENT /LOADINF",
+    "noRestartArg": "/NORESTART",
+    "hotFolderId": "iCameraHotFolder",
+    "hotFolderLocation": "{install_path}\\filecatalyst-hotfolder",
+    "supportedExtensions": [".exe", ".zip"]
+  },
+  "application": {
+    "destinationFolder": "app",
+    "files": [
+      "CameraProxy.jar",
+      "proxy-details.properties",
+      "logback.xml"
+    ],
+    "configurations": {
+      "proxy-details.properties": {
+        "url": "jdbc:hsqldb:hsql://localhost:{port}/{dbname}",
+        "filecatalyst.install.path": "{fc_install_path}",
+        "filecatalyst.hotfolder.path": "{fc_hotfolder_path}"
+      },
+      "logback.xml": {
+        "logLevel": "INFO"
+      }
+    }
+  },
+  "services": {
+    "hsqldb": {
+      "name": "iCameraHSQLDB",
+      "displayName": "iCamera HSQLDB Service",
+      "description": "HSQLDB database service for iCamera Proxy",
+      "executable": "prunsrv.exe",
+      "startMode": "auto",
+      "workingDirectory": "{install_path}\\{hsqldb_folder}",
+      "jvmOptions": [
+        "-Xms256m",
+        "-Xmx512m"
+      ],
+      "mainClass": "org.hsqldb.server.Server",
+      "arguments": ["--props", "{install_path}\\{hsqldb_folder}\\server.properties"],
+      "stdOutput": "logs\\hsqldb-stdout.log",
+      "stdError": "logs\\hsqldb-stderr.log",
+      "restartDelay": 5000,
+      "maxRestartAttempts": 3,
+      "resetInterval": 300000
+    },
+    "icameraproxy": {
+      "name": "iCameraProxy",
+      "displayName": "iCamera Proxy Service",
+      "description": "iCamera Proxy application service",
+      "executable": "prunsrv.exe",
+      "startMode": "auto",
+      "dependsOn": "iCameraHSQLDB",
+      "workingDirectory": "{install_path}\\app",
+      "jvmOptions": [
+        "-Xms512m",
+        "-Xmx1024m",
+        "-Dlogback.configurationFile=logback.xml",
+        "-Djava.awt.headless=true"
+      ],
+      "environmentVars": {
+        "ICAMERA_PROXY_HOME": "{install_path}\\app",
+        "FFMPEG_HOME": "{install_path}\\ffmpeg\\bin"
+      },
+      "mainClass": "com.icamera.proxy.Main",
+      "jarFile": "CameraProxy.jar",
+      "stdOutput": "logs\\icamera-stdout.log",
+      "stdError": "logs\\icamera-stderr.log",
+      "restartDelay": 10000,
+      "maxRestartAttempts": 5,
+      "resetInterval": 600000
+    }
+  }
+}

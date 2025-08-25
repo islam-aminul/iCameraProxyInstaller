@@ -1,0 +1,28 @@
+-- iCamera Database Schema Initialization
+CREATE SCHEMA IF NOT EXISTS icamera;
+
+-- System settings table
+CREATE TABLE IF NOT EXISTS system_settings (
+    id INTEGER IDENTITY PRIMARY KEY,
+    setting_name VARCHAR(100) NOT NULL UNIQUE,
+    setting_value VARCHAR(500),
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Camera configuration table
+CREATE TABLE IF NOT EXISTS camera_config (
+    id INTEGER IDENTITY PRIMARY KEY,
+    camera_name VARCHAR(100) NOT NULL,
+    camera_url VARCHAR(500) NOT NULL,
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Installation log table
+CREATE TABLE IF NOT EXISTS installation_log (
+    id INTEGER IDENTITY PRIMARY KEY,
+    install_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    version VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'COMPLETED'
+);

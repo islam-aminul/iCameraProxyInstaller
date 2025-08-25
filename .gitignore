@@ -1,0 +1,38 @@
+# Installation logs
+installer_*.log
+
+# Downloaded dependencies
+*.zip
+*.7z
+*.exe
+!install.bat
+
+# FileCatalyst settings
+fc_hotfolder_settings.inf
+
+# Temporary extraction folders
+fc_temp/
+*_temp/
+
+# Database files (runtime)
+*.db
+*.lck
+*.log
+*.properties.backup
+
+# Service logs
+logs/
+
+# Windows system files
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.backup
+*~
