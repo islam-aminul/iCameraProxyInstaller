@@ -1,5 +1,9 @@
 #Requires -RunAsAdministrator
 
+param(
+    [switch]$Uninstall
+)
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -1815,11 +1819,119 @@ function Start-Installation {
     }
 }
 
+# Uninstall functions
+function Remove-Services {
+    try {
+        $servicesConfig = $script:Config.services
+        
+        # Stop and remove iCamera Proxy service
+        $proxyService = $servicesConfig.icameraproxy.name
+        if (Get-Service -Name $proxyService -ErrorAction SilentlyContinue) {
+            Write-Log -Message "Stopping and removing service: $proxyService" -Level "INFO"
+            Stop-Service -Name $proxyService -Force -ErrorAction SilentlyContinue
+            & sc.exe delete $proxyService
+        }
+        
+        # Stop and remove HSQLDB service
+        $hsqldbService = $servicesConfig.hsqldb.name
+        if (Get-Service -Name $hsqldbService -ErrorAction SilentlyContinue) {
+            Write-Log -Message "Stopping and removing service: $hsqldbService" -Level "INFO"
+            Stop-Service -Name $hsqldbService -Force -ErrorAction SilentlyContinue
+            & sc.exe delete $hsqldbService
+        }
+        
+        Write-Log -Message "Services removed successfully" -Level "INFO"
+    }
+    catch {
+        Write-Log -Message "Error removing services: $($_.Exception.Message)" -Level "ERROR"
+    }
+}
+
+function Remove-InstallationFiles {
+    try {
+        # Find installation directories
+        $possiblePaths = @("C:\iCamera", "D:\iCamera", "E:\iCamera", "F:\iCamera")
+        
+        foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+                Write-Log -Message "Removing installation directory: $path" -Level "INFO"
+                Remove-Item -Path $path -Recurse -Force -ErrorAction Continue
+                Write-Log -Message "Installation directory removed: $path" -Level "INFO"
+            }
+        }
+    }
+    catch {
+        Write-Log -Message "Error removing installation files: $($_.Exception.Message)" -Level "ERROR"
+    }
+}
+
+function Remove-ScheduledTasks {
+    try {
+        $taskName = $script:Config.cleanup.taskName
+        $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        
+        if ($task) {
+            Write-Log -Message "Removing scheduled task: $taskName" -Level "INFO"
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+            Write-Log -Message "Scheduled task removed: $taskName" -Level "INFO"
+        }
+    }
+    catch {
+        Write-Log -Message "Error removing scheduled tasks: $($_.Exception.Message)" -Level "ERROR"
+    }
+}
+
+function Start-Uninstall {
+    Write-Log -Message "Starting iCamera Proxy uninstallation" -Level "INFO"
+    
+    try {
+        Write-Host "Uninstalling iCamera Proxy..." -ForegroundColor Yellow
+        
+        # Remove services
+        Write-Host "Removing services..." -ForegroundColor Green
+        Remove-Services
+        
+        # Remove scheduled tasks
+        Write-Host "Removing scheduled tasks..." -ForegroundColor Green
+        Remove-ScheduledTasks
+        
+        # Remove installation files
+        Write-Host "Removing installation files..." -ForegroundColor Green
+        Remove-InstallationFiles
+        
+        Write-Log -Message "Uninstallation completed successfully" -Level "INFO"
+        Write-Host "iCamera Proxy has been successfully uninstalled." -ForegroundColor Green
+        
+    }
+    catch {
+        $errorMsg = "Uninstallation failed: $($_.Exception.Message)"
+        Write-Log -Message $errorMsg -Level "ERROR"
+        Write-Host $errorMsg -ForegroundColor Red
+        exit 1
+    }
+}
+
 # Main entry point
 function Main {
     try {
         # Initialize logging first
         Initialize-Logging
+        
+        # Check for uninstall argument
+        if ($Uninstall) {
+            # Check admin rights and elevate if needed
+            if (-not (Test-AdminRights)) {
+                Write-Log -Message "Requesting admin elevation for uninstall" -Level "INFO"
+                Request-AdminElevation
+            }
+            
+            # Load configuration
+            $script:Config = Get-Configuration
+            
+            # Run uninstall
+            Start-Uninstall
+            return
+        }
         
         # Check for existing instance
         if (-not (Test-ExistingInstance)) {

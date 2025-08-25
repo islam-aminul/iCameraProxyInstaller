@@ -62,7 +62,7 @@
         "name": "Apache Commons Daemon",
         "filePattern": "*daemon*.zip,*procrun*.zip",
         "supportedExtensions": [".zip"],
-        "downloadUrl": "https://archive.apache.org/dist/commons/daemon/binaries/windows/commons-daemon-1.4.0-bin-windows.zip",
+        "downloadUrl": "https://archive.apache.org/dist/commons/daemon/binaries/windows/commons-daemon-1.4.0-bin-windows-amd64.zip",
         "sha256": "",
         "targetSubfolder": "procrun",
         "localOnly": false,
