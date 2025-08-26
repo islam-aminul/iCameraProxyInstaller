@@ -1,14 +1,33 @@
--- iCamera Database Initial Data
-INSERT INTO system_settings (setting_name, setting_value) VALUES 
-('app_version', '1.0.0'),
-('max_cameras', '10'),
-('enable_hotfolder', 'true'),
-('log_level', 'INFO'),
-('backup_enabled', 'true');
+-- Insert default camera proxy configuration
+INSERT INTO public.mspgbl_camera_proxy (proxy_name, proxy_host, proxy_port, status) 
+VALUES ('iCamera-Main-Proxy', 'localhost', 8080, 'ACTIVE');
 
-INSERT INTO camera_config (camera_name, camera_url) VALUES 
-('Default Camera 1', 'https://cctv4.tcsion.com/stream1'),
-('Default Camera 2', 'https://cctv8.tcsion.com/stream2');
+-- Insert camera adapter configurations
+INSERT INTO public.msp_camera_adapter (adapter_name, adapter_impl_id_fk, adapter_config, status) 
+VALUES ('Default-HTTP-Adapter', 1001, '{"timeout":30000,"retries":3,"format":"mjpeg"}', 'ACTIVE');
 
-INSERT INTO installation_log (version, status) VALUES 
-('1.0.0', 'COMPLETED');
+INSERT INTO public.msp_camera_adapter (adapter_name, adapter_impl_id_fk, adapter_config, status) 
+VALUES ('RTSP-Stream-Adapter', 1002, '{"protocol":"rtsp","buffer_size":8192,"codec":"h264"}', 'ACTIVE');
+
+INSERT INTO public.msp_camera_adapter (adapter_name, adapter_impl_id_fk, adapter_config, status) 
+VALUES ('FileCatalyst-HotFolder-Adapter', 1017, '{"hotfolder_path":"/filecatalyst-hotfolder","monitor_interval":5000}', 'ACTIVE');
+
+-- Insert system settings
+INSERT INTO public.system_settings (setting_name, setting_value, description) 
+VALUES ('app_version', '1.0.0', 'Application version');
+
+INSERT INTO public.system_settings (setting_name, setting_value, description) 
+VALUES ('max_concurrent_streams', '10', 'Maximum concurrent camera streams');
+
+INSERT INTO public.system_settings (setting_name, setting_value, description) 
+VALUES ('enable_hotfolder', 'true', 'Enable FileCatalyst HotFolder integration');
+
+INSERT INTO public.system_settings (setting_name, setting_value, description) 
+VALUES ('log_retention_days', '30', 'Number of days to retain application logs');
+
+INSERT INTO public.system_settings (setting_name, setting_value, description) 
+VALUES ('stream_quality', 'HIGH', 'Default stream quality setting');
+
+-- Insert initial log entry
+INSERT INTO public.application_logs (log_level, log_message, source_class, thread_name) 
+VALUES ('INFO', 'Database initialized successfully', 'com.icamera.proxy.DatabaseInitializer', 'main');

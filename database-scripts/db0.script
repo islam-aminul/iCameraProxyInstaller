@@ -1,67 +1,36 @@
-
--- Create sample tables
-CREATE TABLE customers (
-    customer_id INTEGER IDENTITY PRIMARY KEY,
-    first_name VARCHAR(50),
-    last_name VARCHAR(50),
-    email VARCHAR(100),
-    phone VARCHAR(20),
-    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE orders (
-    order_id INTEGER IDENTITY PRIMARY KEY,
-    customer_id INTEGER,
-    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    total_amount DECIMAL(10,2),
-    status VARCHAR(20),
-    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-);
-
-CREATE TABLE products (
-    product_id INTEGER IDENTITY PRIMARY KEY,
-    product_name VARCHAR(100),
-    description VARCHAR(500),
-    price DECIMAL(10,2),
-    stock_quantity INTEGER
-);
-
-CREATE TABLE order_items (
-    order_id INTEGER,
-    product_id INTEGER,
-    quantity INTEGER,
-    unit_price DECIMAL(10,2),
-    PRIMARY KEY (order_id, product_id),
-    FOREIGN KEY (order_id) REFERENCES orders(order_id),
-    FOREIGN KEY (product_id) REFERENCES products(product_id)
-);
-
--- Insert sample data
-INSERT INTO customers (first_name, last_name, email, phone)
-VALUES 
-('John', 'Doe', 'john.doe@email.com', '555-0100'),
-('Jane', 'Smith', 'jane.smith@email.com', '555-0101'),
-('Bob', 'Johnson', 'bob.johnson@email.com', '555-0102');
-
-INSERT INTO products (product_name, description, price, stock_quantity)
-VALUES
-('Laptop', 'High performance laptop', 999.99, 50),
-('Smartphone', 'Latest model smartphone', 699.99, 100),
-('Tablet', '10-inch tablet', 299.99, 75);
-
-INSERT INTO orders (customer_id, total_amount, status)
-VALUES
-(1, 999.99, 'COMPLETED'),
-(2, 699.99, 'PENDING'),
-(3, 599.98, 'PROCESSING');
-
-INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-VALUES
-(1, 1, 1, 999.99),
-(2, 2, 1, 699.99),
-(3, 3, 2, 299.99);
-
--- Create indexes
-CREATE INDEX idx_customer_email ON customers(email);
-CREATE INDEX idx_order_date ON orders(order_date);
-CREATE INDEX idx_product_name ON products(product_name);
+SET DATABASE UNIQUE NAME HSQLDB8A1E2B2B5E
+SET DATABASE GC 0
+SET DATABASE DEFAULT RESULT MEMORY ROWS 0
+SET DATABASE EVENT LOG LEVEL 0
+SET DATABASE TRANSACTION CONTROL LOCKS
+SET DATABASE DEFAULT ISOLATION LEVEL READ COMMITTED
+SET DATABASE TRANSACTION ROLLBACK ON CONFLICT TRUE
+SET DATABASE TEXT TABLE DEFAULTS ''
+SET DATABASE SQL NAMES FALSE
+SET DATABASE SQL REFERENCES FALSE
+SET DATABASE SQL SIZE TRUE
+SET DATABASE SQL TYPES FALSE
+SET DATABASE SQL TDC DELETE TRUE
+SET DATABASE SQL TDC UPDATE TRUE
+SET DATABASE SQL CONCAT NULLS TRUE
+SET DATABASE SQL UNIQUE NULLS TRUE
+SET DATABASE SQL CONVERT TRUNCATE TRUE
+SET DATABASE SQL AVG SCALE 0
+SET DATABASE SQL DOUBLE NAN TRUE
+SET FILES WRITE DELAY 500 MILLIS
+SET FILES BACKUP INCREMENT TRUE
+SET FILES CACHE SIZE 10000
+SET FILES CACHE ROWS 50000
+SET FILES SCALE 32
+SET FILES LOB SCALE 32
+SET FILES DEFRAG 0
+SET FILES NIO TRUE
+SET FILES NIO SIZE 256
+SET FILES LOG TRUE
+SET FILES LOG SIZE 50
+SET FILES CHECK 2
+SET DATABASE COLLATION "SQL_TEXT" PAD SPACE
+CREATE USER SA PASSWORD DIGEST 'd41d8cd98f00b204e9800998ecf8427e'
+ALTER USER SA SET LOCAL TRUE
+CREATE SCHEMA PUBLIC AUTHORIZATION DBA
+SET SCHEMA PUBLIC

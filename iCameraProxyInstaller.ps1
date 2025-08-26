@@ -292,9 +292,8 @@ function Invoke-Step2 {
         Write-Log -Message "Cleanup completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Cleanup failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "Cleanup failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 function Invoke-Step3 { 
@@ -372,9 +371,8 @@ function Invoke-Step3 {
         Write-Log -Message "Drive selection and directory creation completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Drive selection and directory creation failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "Drive selection and directory creation failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 function Invoke-Step4 { 
@@ -455,9 +453,8 @@ function Invoke-Step4 {
         Write-Log -Message "Prechecks completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Prechecks failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "Prechecks failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 # Dependency management functions
@@ -857,9 +854,8 @@ function Invoke-Step5 {
         Write-Log -Message "All dependencies processed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Dependency processing failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "Dependency processing failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 # Database management functions
@@ -1360,9 +1356,8 @@ Recommended: Choose YES unless you want to change your previous setup.
         Write-Log -Message "FileCatalyst setup completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "FileCatalyst setup failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "FileCatalyst setup failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 # Application setup functions
@@ -1509,9 +1504,8 @@ function Invoke-Step8 {
         Write-Log -Message "Application setup completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Application setup failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "Application setup failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 # Service registration functions
@@ -1554,6 +1548,7 @@ function Register-WindowsService {
             )
             
             Write-Log -Message "Installing new service: $($ServiceConfig.name)" -Level "INFO"
+            Write-Log -Message "Install command: $procrunPath $($installArgs -join ' ')" -Level "INFO"
             & $procrunPath $installArgs
             
             if ($LASTEXITCODE -ne 0) {
@@ -1564,9 +1559,10 @@ function Register-WindowsService {
         }
         
         # Update service configuration
+        $jreHome = Join-Path $InstallPath $jreFolder
         $updateArgs = @(
             "//US//$($ServiceConfig.name)"
-            "--Jvm=$javaPath"
+            "--JavaHome=$jreHome"
             "--StartMode=Java"
             "--StopMode=Java"
             "--StartClass=$($ServiceConfig.mainClass)"
@@ -1621,6 +1617,7 @@ function Register-WindowsService {
         }
         
         Write-Log -Message "Updating service configuration: $($ServiceConfig.name)" -Level "INFO"
+        Write-Log -Message "Update command: $procrunPath $($updateArgs -join ' ')" -Level "INFO"
         & $procrunPath $updateArgs
         
         if ($LASTEXITCODE -ne 0) {
@@ -1667,9 +1664,8 @@ function Invoke-Step9 {
         Write-Log -Message "Service registration completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Service registration failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
-        throw $errorMsg
+        Write-Log -Message "Service registration failed: $($_.Exception.Message)" -Level "ERROR"
+        throw
     }
 }
 function Test-ServiceRunning {
@@ -1691,13 +1687,38 @@ function Wait-ForService {
     )
     
     $timeout = (Get-Date).AddSeconds($TimeoutSeconds)
+    $attempts = 0
+    $maxAttempts = [math]::Floor($TimeoutSeconds / 2)
     
-    while ((Get-Date) -lt $timeout) {
+    while ((Get-Date) -lt $timeout -and $attempts -lt $maxAttempts) {
+        $attempts++
+        
         if (Test-ServiceRunning -ServiceName $ServiceName) {
+            Write-Log -Message "Service $ServiceName started successfully after $($attempts * 2) seconds" -Level "INFO"
             return $true
         }
+        
+        # Check service status for better error reporting
+        try {
+            $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+            if ($service) {
+                Write-Log -Message "Service $ServiceName status: $($service.Status) (attempt $attempts/$maxAttempts)" -Level "INFO"
+                
+                # If service is stopped or failed, don't continue waiting
+                if ($service.Status -eq 'Stopped') {
+                    Write-Log -Message "Service $ServiceName is stopped, will not start automatically" -Level "ERROR"
+                    return $false
+                }
+            }
+        }
+        catch {
+            Write-Log -Message "Could not check service status for $ServiceName" -Level "WARNING"
+        }
+        
         Start-Sleep -Seconds 2
     }
+    
+    Write-Log -Message "Service $ServiceName failed to start after $TimeoutSeconds seconds ($attempts attempts)" -Level "ERROR"
     return $false
 }
 
@@ -1712,22 +1733,36 @@ function Invoke-Step10 {
         
         # Start HSQLDB service
         Write-Log -Message "Starting HSQLDB service: $hsqldbService" -Level "INFO"
-        Start-Service -Name $hsqldbService -ErrorAction Stop
+        try {
+            Start-Service -Name $hsqldbService -ErrorAction Stop
+        }
+        catch {
+            Write-Log -Message "Failed to start HSQLDB service: $($_.Exception.Message)" -Level "ERROR"
+            throw "HSQLDB service startup failed: $($_.Exception.Message)"
+        }
         
         # Wait for HSQLDB to be running
         Write-Log -Message "Waiting for HSQLDB service to start..." -Level "INFO"
         if (-not (Wait-ForService -ServiceName $hsqldbService -TimeoutSeconds 30)) {
+            Write-Log -Message "HSQLDB service failed to start within 30 seconds" -Level "ERROR"
             throw "HSQLDB service failed to start within timeout period"
         }
         Write-Log -Message "HSQLDB service is running successfully" -Level "INFO"
         
         # Start iCamera Proxy service
         Write-Log -Message "Starting iCamera Proxy service: $proxyService" -Level "INFO"
-        Start-Service -Name $proxyService -ErrorAction Stop
+        try {
+            Start-Service -Name $proxyService -ErrorAction Stop
+        }
+        catch {
+            Write-Log -Message "Failed to start iCamera Proxy service: $($_.Exception.Message)" -Level "ERROR"
+            throw "iCamera Proxy service startup failed: $($_.Exception.Message)"
+        }
         
         # Wait for iCamera Proxy to be running
         Write-Log -Message "Waiting for iCamera Proxy service to start..." -Level "INFO"
         if (-not (Wait-ForService -ServiceName $proxyService -TimeoutSeconds 45)) {
+            Write-Log -Message "iCamera Proxy service failed to start within 45 seconds" -Level "ERROR"
             throw "iCamera Proxy service failed to start within timeout period"
         }
         Write-Log -Message "iCamera Proxy service is running successfully" -Level "INFO"
@@ -1772,8 +1807,7 @@ Both services are configured to start automatically on system boot.
         Write-Log -Message "Service startup and validation completed successfully" -Level "INFO"
         
     } catch {
-        $errorMsg = "Service startup and validation failed: $($_.Exception.Message)"
-        Write-Log -Message $errorMsg -Level "ERROR"
+        Write-Log -Message "Service startup and validation failed: $($_.Exception.Message)" -Level "ERROR"
         
         # Show failure message to user
         $failureMsg = @"
@@ -1792,7 +1826,7 @@ You may need to:
 "@
         
         Show-Error -Message $failureMsg -Title "Installation Failed"
-        throw $errorMsg
+        throw
     }
 }
 

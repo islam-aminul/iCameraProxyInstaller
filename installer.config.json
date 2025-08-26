@@ -142,7 +142,7 @@
     ]
   },
   "application": {
-    "destinationFolder": "app",
+    "destinationFolder": "proxy",
     "files": [
       "CameraProxy.jar",
       "proxy-details.properties",
