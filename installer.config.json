@@ -3,8 +3,9 @@
     "name": "iCamera Proxy Installer",
     "version": "1.0.0",
     "description": "GUI-based installer for iCamera Proxy configuration",
-    "author": "System Administrator",
-    "created": "2024-01-01",
+    "author": "Aminul Islam",
+    "created": "2025-08-27",
+    "copyright": "Copyright © 2025 Consultancy Services",
     "requiresAdmin": true
   },
   "installation": {
@@ -13,7 +14,7 @@
   },
   "ui": {
     "windowTitle": "iCamera Proxy Installer",
-    "windowWidth": 500,
+    "windowWidth": 400,
     "windowHeight": 400,
     "progressBarHeight": 20
   },
@@ -22,7 +23,7 @@
     "folderName": "iCamera"
   },
   "requirements": {
-    "minimumRamGB": 4,
+    "minimumRamGB": 8,
     "minimumDiskSpaceGB": 2,
     "connectivityUrls": [
       "https://g01.tcsion.com",
@@ -38,8 +39,10 @@
     "packages": {
       "jre": {
         "name": "Java Runtime Environment",
-        "filePattern": "*corretto*jre*.zip,*openjdk*8*.zip",
-        "supportedExtensions": [".zip"],
+        "filePattern": "*corretto*jre*,*openjdk*8*",
+        "supportedExtensions": [
+          ".zip"
+        ],
         "downloadUrl": "https://corretto.aws/downloads/latest/amazon-corretto-8-x64-windows-jre.zip",
         "sha256": "",
         "targetSubfolder": "jre",
@@ -49,8 +52,10 @@
       },
       "hsqldb": {
         "name": "HSQLDB",
-        "filePattern": "hsqldb*.zip",
-        "supportedExtensions": [".zip"],
+        "filePattern": "hsqldb*",
+        "supportedExtensions": [
+          ".zip"
+        ],
         "downloadUrl": "https://master.dl.sourceforge.net/project/hsqldb/hsqldb/hsqldb_2_3/hsqldb-2.3.4.zip?viasf=1",
         "sha256": "C00547495CA8F1DE29CCBDD41965AB130ACBC616F32DCBE58B3AED16169C962E",
         "targetSubfolder": "hsqldb",
@@ -60,9 +65,11 @@
       },
       "procrun": {
         "name": "Apache Commons Daemon",
-        "filePattern": "*daemon*.zip,*procrun*.zip",
-        "supportedExtensions": [".zip"],
-        "downloadUrl": "https://archive.apache.org/dist/commons/daemon/binaries/windows/commons-daemon-1.4.0-bin-windows-amd64.zip",
+        "filePattern": "*daemon*,*procrun*",
+        "supportedExtensions": [
+          ".zip"
+        ],
+        "downloadUrl": "https://downloads.apache.org/commons/daemon/binaries/windows/commons-daemon-1.4.1-bin-windows.zip",
         "sha256": "",
         "targetSubfolder": "procrun",
         "localOnly": false,
@@ -71,8 +78,11 @@
       },
       "ffmpeg": {
         "name": "FFmpeg Essentials",
-        "filePattern": "ffmpeg*.zip,ffmpeg*.7z",
-        "supportedExtensions": [".zip", ".7z"],
+        "filePattern": "ffmpeg*",
+        "supportedExtensions": [
+          ".zip",
+          ".7z"
+        ],
         "downloadUrl": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z",
         "sha256": "",
         "targetSubfolder": "ffmpeg",
@@ -82,8 +92,10 @@
       },
       "7zr": {
         "name": "7-Zip Standalone",
-        "filePattern": "7zr.exe",
-        "supportedExtensions": [".exe"],
+        "filePattern": "7zr",
+        "supportedExtensions": [
+          ".exe"
+        ],
         "downloadUrl": "https://www.7-zip.org/a/7zr.exe",
         "sha256": "",
         "targetSubfolder": "tools",
@@ -105,17 +117,18 @@
     "memoryDbId": "mem",
     "dataDirectory": "hsqldb/data",
     "initScripts": [
+      "database-scripts/db0.script",
       "database-scripts/create.script",
       "database-scripts/insert.script"
     ],
     "appScript": "CameraProxy.sql",
     "queries": {
-      "installInfo": "SELECT CURRENT_TIMESTAMP as install_date;",
-      "fileCatalystCheck": "SELECT 'true' as install_hotfolder;"
+      "installInfo": "SELECT id AS proxy_id, proxy_name FROM public.mspgbl_camera_proxy;",
+      "fileCatalystCheck": "SELECT CASE WHEN COUNT(*) > 0 THEN 'TRUE' ELSE 'FALSE' END AS install_fc_hotfolder FROM public.msp_camera_adapter WHERE adapter_impl_id_fk = 1017;"
     }
   },
   "filecatalyst": {
-    "installerPattern": "*filecatalyst*hotfolder*.exe,install_fc_hotfolder.exe",
+    "installerPattern": "*filecatalyst*hotfolder*,install_fc_hotfolder",
     "downloadUrl": "https://filecatalyst.software/public/filecatalyst/Direct/4.0.0.375/Windows/install_fc_hotfolder.exe",
     "settingsFile": "fc_hotfolder_settings.inf",
     "saveInfCommand": "/SAVEINF",
@@ -123,7 +136,10 @@
     "noRestartArg": "/NORESTART",
     "hotFolderId": "iCameraHotFolder",
     "hotFolderLocation": "{install_path}\\filecatalyst-hotfolder",
-    "supportedExtensions": [".exe", ".zip"]
+    "supportedExtensions": [
+      ".exe",
+      ".zip"
+    ]
   },
   "application": {
     "destinationFolder": "app",
@@ -156,7 +172,10 @@
         "-Xmx512m"
       ],
       "mainClass": "org.hsqldb.server.Server",
-      "arguments": ["--props", "{install_path}\\{hsqldb_folder}\\server.properties"],
+      "arguments": [
+        "--props",
+        "{install_path}\\{hsqldb_folder}\\server.properties"
+      ],
       "stdOutput": "logs\\hsqldb-stdout.log",
       "stdError": "logs\\hsqldb-stderr.log",
       "restartDelay": 5000,

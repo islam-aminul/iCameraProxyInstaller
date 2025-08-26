@@ -949,8 +949,8 @@ function Execute-SqlScript {
         
         $javaPath = Join-Path $script:InstallPath "$jreFolder\bin\java.exe"
         $sqltoolJar = Join-Path $script:InstallPath "$hsqldbFolder\hsqldb\lib\sqltool.jar"
-        
-        & $javaPath -cp $sqltoolJar org.hsqldb.cmdline.SqlTool --rcFile=$RcFile $ConnectionName $ScriptPath
+
+        & $javaPath -cp $sqltoolJar org.hsqldb.cmdline.SqlTool --autoCommit --rcFile=$RcFile $ConnectionName $ScriptPath
         return $LASTEXITCODE -eq 0
     }
     catch {
@@ -973,7 +973,7 @@ function Execute-SqlQuery {
         $javaPath = Join-Path $script:InstallPath "$jreFolder\bin\java.exe"
         $sqltoolJar = Join-Path $script:InstallPath "$hsqldbFolder\hsqldb\lib\sqltool.jar"
         
-        $result = & $javaPath -cp $sqltoolJar org.hsqldb.cmdline.SqlTool --rcFile=$RcFile --sql="$Query" $ConnectionName
+        $result = & $javaPath -cp $sqltoolJar org.hsqldb.cmdline.SqlTool --autoCommit --rcFile=$RcFile --sql="$Query" $ConnectionName
         return $result
     }
     catch {
@@ -1338,6 +1338,8 @@ Recommended: Choose YES unless you want to change your previous setup.
             # Create/update hotfolders.xml
             $hotfoldersXml = Join-Path $fcInstallDir "hotfolders.xml"
             $hotFolderLocation = $fcConfig.hotFolderLocation -replace "\{install_path\}", $script:InstallPath
+            # Convert to Unix path format for FileCatalyst
+            $hotFolderLocation = $hotFolderLocation -replace '\\', '/'
             $updated = Update-HotFoldersXml -FilePath $hotfoldersXml -HotFolderId $fcConfig.hotFolderId -HotFolderLocation $hotFolderLocation
             
             if ($updated) {
