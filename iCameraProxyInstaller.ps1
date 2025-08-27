@@ -273,10 +273,12 @@ function Invoke-Step2 {
                     Write-Log -Message "Deleting folder: $folderPath" -Level "INFO"
                     Remove-Item -Path $folderPath -Recurse -Force
                     Write-Log -Message "Folder deleted successfully: $folderPath" -Level "INFO"
-                } else {
+                }
+                else {
                     Write-Log -Message "Folder not found: $folderPath" -Level "INFO"
                 }
-            } else {
+            }
+            else {
                 Write-Log -Message "Could not determine script path from task action" -Level "WARNING"
             }
             
@@ -285,13 +287,15 @@ function Invoke-Step2 {
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
             Write-Log -Message "Scheduled task removed successfully: $taskName" -Level "INFO"
             
-        } else {
+        }
+        else {
             Write-Log -Message "Scheduled task not found: $taskName" -Level "INFO"
         }
         
         Write-Log -Message "Cleanup completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Cleanup failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -311,7 +315,8 @@ function Invoke-Step3 {
             # Only one drive available
             $selectedDrive = $drives[0].DeviceID
             Write-Log -Message "Single drive detected, auto-selecting: $selectedDrive" -Level "INFO"
-        } else {
+        }
+        else {
             # Multiple drives - suggest drive with most free space
             $recommendedDrive = $drives | Sort-Object FreeSpace -Descending | Select-Object -First 1
             $driveList = $drives | ForEach-Object { "$($_.DeviceID) (Free: $([math]::Round($_.FreeSpace/1GB, 2)) GB)" }
@@ -337,7 +342,8 @@ function Invoke-Step3 {
                 if ($selectedDrive -in $driveOptions) {
                     Write-Log -Message "User selected drive: $selectedDrive" -Level "INFO"
                     break
-                } else {
+                }
+                else {
                     Show-Warning -Message "Invalid drive selection. Please choose from available drives."
                 }
             } while ($true)
@@ -354,7 +360,8 @@ function Invoke-Step3 {
             Write-Log -Message "Creating installation directory: $script:InstallPath" -Level "INFO"
             New-Item -Path $script:InstallPath -ItemType Directory -Force | Out-Null
             Write-Log -Message "Installation directory created successfully" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Log -Message "Installation directory already exists: $script:InstallPath" -Level "INFO"
         }
         
@@ -364,13 +371,15 @@ function Invoke-Step3 {
             
             # Set ACL permissions for installation root
             Set-DirectoryPermissions -Path $script:InstallPath
-        } else {
+        }
+        else {
             throw "Failed to create or verify installation directory: $script:InstallPath"
         }
         
         Write-Log -Message "Drive selection and directory creation completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Drive selection and directory creation failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -395,7 +404,8 @@ function Invoke-Step4 {
             Write-Log -Message $errorMsg -Level "ERROR"
             Show-Error -Message $errorMsg
             $preChecksPassed = $false
-        } else {
+        }
+        else {
             Write-Log -Message "RAM requirement satisfied" -Level "INFO"
         }
         
@@ -413,7 +423,8 @@ function Invoke-Step4 {
             Write-Log -Message $errorMsg -Level "ERROR"
             Show-Error -Message $errorMsg
             $preChecksPassed = $false
-        } else {
+        }
+        else {
             Write-Log -Message "Disk space requirement satisfied" -Level "INFO"
         }
         
@@ -446,13 +457,15 @@ function Invoke-Step4 {
             $warningMsg = "Connectivity issues detected with the following URLs:`n" + ($connectivityIssues -join "`n") + "`n`nThe installation can continue, but some features may not work properly."
             Write-Log -Message "Connectivity warnings: $($connectivityIssues.Count) URLs unreachable" -Level "WARNING"
             Show-Warning -Message $warningMsg
-        } else {
+        }
+        else {
             Write-Log -Message "All connectivity checks passed" -Level "INFO"
         }
         
         Write-Log -Message "Prechecks completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Prechecks failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -596,7 +609,8 @@ function Test-FileIntegrity {
         Write-Log -Message "File integrity validation passed: $FilePath" -Level "INFO"
         return $true
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "File integrity check failed: $FilePath - $($_.Exception.Message)" -Level "ERROR"
         return $false
     }
@@ -622,10 +636,12 @@ function Download-Package {
             
             # Basic file size check
             $fileInfo = Get-Item $DestinationPath
-            if ($fileInfo.Length -gt 1024) {  # Must be > 1KB
+            if ($fileInfo.Length -gt 1024) {
+                # Must be > 1KB
                 Write-Log -Message "Download completed: $($fileInfo.Length) bytes" -Level "INFO"
                 return $true
-            } else {
+            }
+            else {
                 Write-Log -Message "Downloaded file too small: $($fileInfo.Length) bytes" -Level "WARNING"
                 Remove-Item $DestinationPath -Force -ErrorAction SilentlyContinue
             }
@@ -703,7 +719,8 @@ function Verify-Executable {
             if ($fullPath -like "*.exe") {
                 $version = (Get-ItemProperty $fullPath).VersionInfo.FileVersion
                 Write-Log -Message "Executable verified: $fullPath (Version: $version)" -Level "INFO"
-            } else {
+            }
+            else {
                 Write-Log -Message "File verified: $fullPath" -Level "INFO"
             }
             return $true
@@ -773,7 +790,8 @@ function Invoke-Step5 {
                         if (Test-FileIntegrity -FilePath $downloadPath -ExpectedSha256 $depConfig.sha256) {
                             $downloadSuccess = $true
                             break
-                        } else {
+                        }
+                        else {
                             Write-Log -Message "Downloaded file failed integrity check, retry $retry/3" -Level "WARNING"
                         }
                     }
@@ -853,7 +871,8 @@ function Invoke-Step5 {
         
         Write-Log -Message "All dependencies processed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Dependency processing failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -1000,7 +1019,8 @@ function Start-HsqldbServer {
         if (-not $process.HasExited) {
             Write-Log -Message "HSQLDB server started successfully (PID: $($process.Id))" -Level "INFO"
             return $process
-        } else {
+        }
+        else {
             Write-Log -Message "HSQLDB server process exited with code: $($process.ExitCode)" -Level "ERROR"
             return $null
         }
@@ -1136,7 +1156,8 @@ pause
         
         Write-Log -Message "Database setup completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         # Shutdown HSQLDB if it was started
         if ($dbProcess -and -not $dbProcess.HasExited) {
             Write-Log -Message "Shutting down HSQLDB server due to error" -Level "INFO"
@@ -1195,7 +1216,8 @@ function Update-HotFoldersXml {
             return $true
         }
         return $false  # Already exists
-    } else {
+    }
+    else {
         Create-HotFoldersXml -FilePath $FilePath -HotFolderId $HotFolderId -HotFolderLocation $HotFolderLocation
         return $true
     }
@@ -1215,7 +1237,8 @@ function Install-FileCatalyst {
             # Load existing settings and install silently
             $args = @($fcConfig.loadInfCommand.Split(' ') + "=`"$SettingsFile`"" + $fcConfig.noRestartArg)
             Write-Log -Message "Installing FileCatalyst with existing settings" -Level "INFO"
-        } else {
+        }
+        else {
             # Generate settings file only (no installation)
             Write-Log -Message "Generating FileCatalyst settings file" -Level "INFO"
             $saveArgs = @($fcConfig.saveInfCommand + "=`"$SettingsFile`"")
@@ -1312,10 +1335,12 @@ Recommended: Choose YES unless you want to change your previous setup.
             
             if ($useExistingSettings) {
                 Write-Log -Message "User chose to use existing settings" -Level "INFO"
-            } else {
+            }
+            else {
                 Write-Log -Message "User chose fresh installation" -Level "INFO"
             }
-        } else {
+        }
+        else {
             Write-Log -Message "No existing settings file found, performing fresh installation" -Level "INFO"
         }
         
@@ -1347,10 +1372,12 @@ Recommended: Choose YES unless you want to change your previous setup.
             
             if ($updated) {
                 Write-Log -Message "Updated hotfolders.xml with iCamera hotfolder configuration" -Level "INFO"
-            } else {
+            }
+            else {
                 Write-Log -Message "iCamera hotfolder already exists in hotfolders.xml" -Level "INFO"
             }
-        } else {
+        }
+        else {
             Write-Log -Message "Could not determine FileCatalyst installation directory" -Level "WARNING"
         }
         
@@ -1362,7 +1389,8 @@ Recommended: Choose YES unless you want to change your previous setup.
         
         Write-Log -Message "FileCatalyst setup completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "FileCatalyst setup failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -1426,7 +1454,7 @@ function Get-FileCatalystPaths {
     $hotFolderPath = $fcConfig.hotFolderLocation -replace "\{install_path\}", $script:InstallPath
     
     return @{
-        InstallPath = $installPath
+        InstallPath   = $installPath
         HotFolderPath = $hotFolderPath
     }
 }
@@ -1452,7 +1480,8 @@ function Invoke-Step8 {
             if (Test-Path $sourcePath) {
                 Copy-Item -Path $sourcePath -Destination $destPath -Force
                 Write-Log -Message "Copied file: $file" -Level "INFO"
-            } else {
+            }
+            else {
                 Write-Log -Message "Source file not found: $file" -Level "WARNING"
             }
         }
@@ -1483,10 +1512,10 @@ function Invoke-Step8 {
             # Update properties
             $ffmpegPath = Join-Path $script:InstallPath "$ffmpegFolder\bin"
             $updates = @{
-                "url" = $dbUrl
-                "filecatalyst.install.path" = $fcPaths.InstallPath
+                "url"                         = $dbUrl
+                "filecatalyst.install.path"   = $fcPaths.InstallPath
                 "filecatalyst.hotfolder.path" = $fcPaths.HotFolderPath
-                "ffmpeg.path" = $ffmpegPath
+                "ffmpeg.path"                 = $ffmpegPath
             }
             
             Update-PropertiesFile -FilePath $propertiesFile -Updates $updates
@@ -1510,7 +1539,8 @@ function Invoke-Step8 {
         
         Write-Log -Message "Application setup completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Application setup failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -1563,7 +1593,8 @@ function Register-WindowsService {
             if ($LASTEXITCODE -ne 0) {
                 throw "Service installation failed with exit code: $LASTEXITCODE"
             }
-        } else {
+        }
+        else {
             Write-Log -Message "Service exists, updating configuration: $($ServiceConfig.name)" -Level "INFO"
         }
         
@@ -1659,7 +1690,8 @@ function Register-WindowsService {
         Write-Log -Message "Service $($ServiceConfig.name) registered successfully" -Level "INFO"
         return $true
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Failed to register service $($ServiceConfig.name): $($_.Exception.Message)" -Level "ERROR"
         return $false
     }
@@ -1686,7 +1718,8 @@ function Invoke-Step9 {
         
         Write-Log -Message "Service registration completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Service registration failed: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
@@ -1820,7 +1853,8 @@ Both services are configured to start automatically on system boot.
             
             Show-Message -Message $successMsg -Title "Installation Complete" -Icon ([System.Windows.Forms.MessageBoxIcon]::Information)
             
-        } else {
+        }
+        else {
             $errorMsg = "Service validation failed - "
             if (-not $hsqldbRunning) { $errorMsg += "HSQLDB service not running. " }
             if (-not $proxyRunning) { $errorMsg += "iCamera Proxy service not running." }
@@ -1829,7 +1863,8 @@ Both services are configured to start automatically on system boot.
         
         Write-Log -Message "Service startup and validation completed successfully" -Level "INFO"
         
-    } catch {
+    }
+    catch {
         Write-Log -Message "Service startup and validation failed: $($_.Exception.Message)" -Level "ERROR"
         
         # Show failure message to user
