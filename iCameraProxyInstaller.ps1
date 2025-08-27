@@ -1168,7 +1168,7 @@ function Execute-SqlQuery
         $javaPath = Join-Path $script:InstallPath "$jreFolder\bin\java.exe"
         $sqltoolJar = Join-Path $script:InstallPath "$hsqldbFolder\hsqldb\lib\sqltool.jar"
 
-        $result = & $javaPath -cp $sqltoolJar org.hsqldb.cmdline.SqlTool --noheader --autoCommit --rcFile=$RcFile --sql="$Query" $ConnectionName
+        $result = & $javaPath -cp $sqltoolJar org.hsqldb.cmdline.SqlTool --autoCommit --rcFile=$RcFile --sql="$Query" $ConnectionName
         return $result
     }
     catch
@@ -1217,14 +1217,14 @@ function Start-HsqldbServer
 
 function Stop-HsqldbServer
 {
-    param([System.Diagnostics.Process]$Process, [string]$RcFile)
+    param($Process, [string]$RcFile)
 
     if ($Process -and -not $Process.HasExited)
     {
         try
         {
             Execute-SqlQuery -Query "SHUTDOWN;" -ConnectionName "server_db" -RcFile $RcFile | Out-Null
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 3
         }
         catch
         {
@@ -1513,6 +1513,18 @@ function Invoke-Step7
         # Find FileCatalyst installer
         Write-Log -Message "Searching for FileCatalyst installer" -Level "INFO"
         $installerPath = Find-LocalPackage -FilePattern $fcConfig.installerPattern -SearchFolders $searchFolders -SupportedExtensions $fcConfig.supportedExtensions
+
+        # Check script root for previously downloaded file
+        if (-not $installerPath)
+        {
+            $fileName = [System.IO.Path]::GetFileName($fcConfig.downloadUrl)
+            $scriptRootFile = Join-Path $PSScriptRoot $fileName
+            if (Test-Path $scriptRootFile)
+            {
+                $installerPath = $scriptRootFile
+                Write-Log -Message "Found FileCatalyst installer in script directory" -Level "INFO"
+            }
+        }
 
         if (-not $installerPath)
         {
@@ -1823,8 +1835,13 @@ function Register-WindowsService
         $workingDir = $workingDir -replace "\{hsqldb_folder\}", $script:Config.dependencies.packages.hsqldb.targetSubfolder
         $workingDir = $workingDir -replace "\{proxy_folder\}", $script:Config.application.destinationFolder
         $workingDir = $workingDir -replace "\{logs_folder\}", $script:Config.application.logsFolder
-        $stdOutput = Join-Path $InstallPath ($ServiceConfig.stdOutput -replace "\{install_path\}", $InstallPath)
-        $stdError = Join-Path $InstallPath ($ServiceConfig.stdError -replace "\{install_path\}", $InstallPath)
+        $stdOutput = $ServiceConfig.stdOutput -replace "\{install_path\}", $InstallPath
+        $stdOutput = $stdOutput -replace "\{logs_folder\}", $script:Config.application.logsFolder
+        $stdOutput = Join-Path $InstallPath $stdOutput
+        
+        $stdError = $ServiceConfig.stdError -replace "\{install_path\}", $InstallPath
+        $stdError = $stdError -replace "\{logs_folder\}", $script:Config.application.logsFolder
+        $stdError = Join-Path $InstallPath $stdError
 
         # Create log directories
         $logDir = Split-Path $stdOutput -Parent
