@@ -590,7 +590,7 @@ function Find-LocalPackage
             $patterns = $FilePattern -split ','
             foreach ($pattern in $patterns)
             {
-                $files = Get-ChildItem -Path $expandedFolder -Filter $pattern.Trim() -ErrorAction SilentlyContinue
+                $files = Get-ChildItem -Path $expandedFolder -Filter "$($pattern.Trim())*" -ErrorAction SilentlyContinue
                 foreach ($file in $files)
                 {
                     if ($file.Extension -in $SupportedExtensions)
@@ -886,46 +886,34 @@ function Invoke-Step5
         $sevenZrConfig = $dependencies.packages."7zr"
         Write-Log -Message "Processing dependency: $( $sevenZrConfig.name )" -Level "INFO"
 
-        $targetPath = Join-Path $script:InstallPath $sevenZrConfig.targetSubfolder
-        $sevenZipPath = Join-Path $targetPath "7zr.exe"
+        $localFile = Find-LocalPackage -FilePattern $sevenZrConfig.filePattern -SearchFolders $searchFolders -SupportedExtensions $sevenZrConfig.supportedExtensions
 
-        # Check if already installed
-        if (Test-Path $sevenZipPath)
+        if (-not $localFile -and -not $sevenZrConfig.localOnly)
         {
-            Write-Log -Message "7zr.exe already installed at target location" -Level "INFO"
+            Write-Log -Message "7zr.exe not found locally, downloading..." -Level "INFO"
+            $downloadPath = Join-Path $PSScriptRoot "7zr.exe"
+            
+            for ($retry = 1; $retry -le 3; $retry++) {
+                if (Download-Package -Url $sevenZrConfig.downloadUrl -DestinationPath $downloadPath)
+                {
+                    if (Test-FileIntegrity -FilePath $downloadPath -ExpectedSha256 $sevenZrConfig.sha256)
+                    {
+                        break
+                    }
+                    Write-Log -Message "Downloaded file failed integrity check, retry $retry/3" -Level "WARNING"
+                }
+                if ($retry -eq 3) { throw "Failed to download 7zr.exe after 3 attempts" }
+            }
+            $localFile = $downloadPath
         }
-        else
+
+        if ($localFile)
         {
-            $localFile = Find-LocalPackage -FilePattern $sevenZrConfig.filePattern -SearchFolders $searchFolders -SupportedExtensions $sevenZrConfig.supportedExtensions
-
-            # Check script root for previously downloaded file
-            if (-not $localFile)
-            {
-                $scriptRootFile = Join-Path $PSScriptRoot "7zr.exe"
-                if (Test-Path $scriptRootFile)
-                {
-                    $localFile = $scriptRootFile
-                    Write-Log -Message "Found 7zr.exe in script directory" -Level "INFO"
-                }
-            }
-
-            if (-not $localFile -and -not $sevenZrConfig.localOnly)
-            {
-                Write-Log -Message "7zr.exe not found locally, downloading..." -Level "INFO"
-                $downloadPath = Join-Path $PSScriptRoot "7zr.exe"
-                if (-not (Download-Package -Url $sevenZrConfig.downloadUrl -DestinationPath $downloadPath))
-                {
-                    throw "Failed to download 7zr.exe"
-                }
-                $localFile = $downloadPath
-            }
-
-            if ($localFile)
-            {
-                New-Item -Path $targetPath -ItemType Directory -Force | Out-Null
-                Copy-Item -Path $localFile -Destination $sevenZipPath -Force
-                Write-Log -Message "7zr.exe installed successfully" -Level "INFO"
-            }
+            $targetPath = Join-Path $script:InstallPath $sevenZrConfig.targetSubfolder
+            New-Item -Path $targetPath -ItemType Directory -Force | Out-Null
+            $sevenZipPath = Join-Path $targetPath "7zr.exe"
+            Copy-Item -Path $localFile -Destination $sevenZipPath -Force
+            Write-Log -Message "7zr.exe installed successfully" -Level "INFO"
         }
 
         # Process other dependencies
@@ -1526,17 +1514,29 @@ function Invoke-Step7
             }
         }
 
-        if (-not $installerPath)
+        if (-not $installerPath -and -not $fcConfig.localOnly)
         {
             Write-Log -Message "FileCatalyst installer not found locally, downloading..." -Level "INFO"
             $fileName = [System.IO.Path]::GetFileName($fcConfig.downloadUrl)
             $downloadPath = Join-Path $PSScriptRoot $fileName
 
-            if (-not (Download-Package -Url $fcConfig.downloadUrl -DestinationPath $downloadPath))
-            {
-                throw "Failed to download FileCatalyst installer"
+            for ($retry = 1; $retry -le 3; $retry++) {
+                if (Download-Package -Url $fcConfig.downloadUrl -DestinationPath $downloadPath)
+                {
+                    if (Test-FileIntegrity -FilePath $downloadPath)
+                    {
+                        break
+                    }
+                    Write-Log -Message "Downloaded file failed integrity check, retry $retry/3" -Level "WARNING"
+                }
+                if ($retry -eq 3) { throw "Failed to download FileCatalyst installer after 3 attempts" }
             }
             $installerPath = $downloadPath
+        }
+        
+        if (-not $installerPath)
+        {
+            throw "FileCatalyst installer not found and download failed"
         }
 
         Write-Log -Message "Found FileCatalyst installer: $installerPath" -Level "INFO"
