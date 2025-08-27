@@ -1334,6 +1334,13 @@ Recommended: Choose YES unless you want to change your previous setup.
             # Create/update hotfolders.xml
             $hotfoldersXml = Join-Path $fcInstallDir "hotfolders.xml"
             $hotFolderLocation = $fcConfig.hotFolderLocation -replace "\{install_path\}", $script:InstallPath
+            
+            # Create HotFolder directory if it doesn't exist
+            if (-not (Test-Path $hotFolderLocation)) {
+                New-Item -Path $hotFolderLocation -ItemType Directory -Force | Out-Null
+                Write-Log -Message "Created HotFolder directory: $hotFolderLocation" -Level "INFO"
+            }
+            
             # Convert to Unix path format for FileCatalyst
             $hotFolderLocation = $hotFolderLocation -replace '\\', '/'
             $updated = Update-HotFoldersXml -FilePath $hotfoldersXml -HotFolderId $fcConfig.hotFolderId -HotFolderLocation $hotFolderLocation
