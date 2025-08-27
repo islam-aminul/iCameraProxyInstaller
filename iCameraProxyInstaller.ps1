@@ -73,28 +73,35 @@ function Write-Log
     }
 
     # Write to GUI log display
-    if ($script:LogDisplay)
+    if ($script:LogDisplay -and $script:LogDisplay.IsHandleCreated)
     {
-        $script:LogDisplay.Invoke([Action]{
-            $color = switch ($Level)
-            {
-                "ERROR" {
-                    [System.Drawing.Color]::Red
+        try
+        {
+            $script:LogDisplay.Invoke([Action]{
+                $color = switch ($Level)
+                {
+                    "ERROR" {
+                        [System.Drawing.Color]::Red
+                    }
+                    "WARNING" {
+                        [System.Drawing.Color]::Yellow
+                    }
+                    "INFO" {
+                        [System.Drawing.Color]::LightGreen
+                    }
                 }
-                "WARNING" {
-                    [System.Drawing.Color]::Yellow
-                }
-                "INFO" {
-                    [System.Drawing.Color]::LightGreen
-                }
-            }
 
-            $script:LogDisplay.SelectionStart = $script:LogDisplay.TextLength
-            $script:LogDisplay.SelectionLength = 0
-            $script:LogDisplay.SelectionColor = $color
-            $script:LogDisplay.AppendText("$logEntry`n")
-            $script:LogDisplay.ScrollToCaret()
-        })
+                $script:LogDisplay.SelectionStart = $script:LogDisplay.TextLength
+                $script:LogDisplay.SelectionLength = 0
+                $script:LogDisplay.SelectionColor = $color
+                $script:LogDisplay.AppendText("$logEntry`n")
+                $script:LogDisplay.ScrollToCaret()
+            })
+        }
+        catch
+        {
+            # Ignore GUI logging errors during initialization
+        }
     }
 
     # Write to file
@@ -135,12 +142,20 @@ function Request-AdminElevation
     try
     {
         $scriptPath = $MyInvocation.ScriptName
-        Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
+        $arguments = "-ExecutionPolicy Bypass -File `"$scriptPath`""
+        
+        # Add -Uninstall parameter if we're in uninstall mode
+        if ($Uninstall) {
+            $arguments += " -Uninstall"
+        }
+        
+        Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs
         exit 0
     }
     catch
     {
-        Show-Error -Message "Administrative access was cancelled or failed. The installer cannot continue without administrator privileges."
+        $message = if ($Uninstall) { "The uninstaller cannot continue without administrator privileges." } else { "The installer cannot continue without administrator privileges." }
+        Show-Error -Message "Administrative access was cancelled or failed. $message"
         exit 1
     }
 }
@@ -2246,30 +2261,76 @@ function Remove-Services
     try
     {
         $servicesConfig = $script:Config.services
+        $servicesRemoved = 0
 
         # Stop and remove iCamera Proxy service
         $proxyService = $servicesConfig.icameraproxy.name
-        if (Get-Service -Name $proxyService -ErrorAction SilentlyContinue)
+        $service = Get-Service -Name $proxyService -ErrorAction SilentlyContinue
+        if ($service)
         {
-            Write-Log -Message "Stopping and removing service: $proxyService" -Level "INFO"
-            Stop-Service -Name $proxyService -Force -ErrorAction SilentlyContinue
-            & sc.exe delete $proxyService
+            Write-Log -Message "Found service: $proxyService (Status: $($service.Status))" -Level "INFO"
+            
+            if ($service.Status -ne 'Stopped')
+            {
+                Write-Log -Message "Stopping service: $proxyService" -Level "INFO"
+                Stop-Service -Name $proxyService -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 3
+            }
+            
+            Write-Log -Message "Removing service: $proxyService" -Level "INFO"
+            $result = & sc.exe delete $proxyService 2>&1
+            if ($LASTEXITCODE -eq 0)
+            {
+                Write-Log -Message "Service removed successfully: $proxyService" -Level "INFO"
+                $servicesRemoved++
+            }
+            else
+            {
+                Write-Log -Message "Failed to remove service $proxyService`: $result" -Level "WARNING"
+            }
+        }
+        else
+        {
+            Write-Log -Message "Service not found: $proxyService" -Level "INFO"
         }
 
         # Stop and remove HSQLDB service
         $hsqldbService = $servicesConfig.hsqldb.name
-        if (Get-Service -Name $hsqldbService -ErrorAction SilentlyContinue)
+        $service = Get-Service -Name $hsqldbService -ErrorAction SilentlyContinue
+        if ($service)
         {
-            Write-Log -Message "Stopping and removing service: $hsqldbService" -Level "INFO"
-            Stop-Service -Name $hsqldbService -Force -ErrorAction SilentlyContinue
-            & sc.exe delete $hsqldbService
+            Write-Log -Message "Found service: $hsqldbService (Status: $($service.Status))" -Level "INFO"
+            
+            if ($service.Status -ne 'Stopped')
+            {
+                Write-Log -Message "Stopping service: $hsqldbService" -Level "INFO"
+                Stop-Service -Name $hsqldbService -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 3
+            }
+            
+            Write-Log -Message "Removing service: $hsqldbService" -Level "INFO"
+            $result = & sc.exe delete $hsqldbService 2>&1
+            if ($LASTEXITCODE -eq 0)
+            {
+                Write-Log -Message "Service removed successfully: $hsqldbService" -Level "INFO"
+                $servicesRemoved++
+            }
+            else
+            {
+                Write-Log -Message "Failed to remove service $hsqldbService`: $result" -Level "WARNING"
+            }
+        }
+        else
+        {
+            Write-Log -Message "Service not found: $hsqldbService" -Level "INFO"
         }
 
-        Write-Log -Message "Services removed successfully" -Level "INFO"
+        Write-Log -Message "Services removal completed. Removed: $servicesRemoved services" -Level "INFO"
     }
     catch
     {
         Write-Log -Message "Error removing services: $( $_.Exception.Message )" -Level "ERROR"
+        throw
     }
 }
 
@@ -2279,20 +2340,69 @@ function Remove-InstallationFiles
     {
         # Find installation directories
         $possiblePaths = @("C:\iCamera", "D:\iCamera", "E:\iCamera", "F:\iCamera")
+        $directoriesRemoved = 0
 
         foreach ($path in $possiblePaths)
         {
             if (Test-Path $path)
             {
+                Write-Log -Message "Found installation directory: $path" -Level "INFO"
+                
+                # Get directory size for logging
+                try
+                {
+                    $size = (Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                    $sizeMB = [math]::Round($size / 1MB, 2)
+                    Write-Log -Message "Directory size: $sizeMB MB" -Level "INFO"
+                }
+                catch
+                {
+                    Write-Log -Message "Could not calculate directory size" -Level "WARNING"
+                }
+                
                 Write-Log -Message "Removing installation directory: $path" -Level "INFO"
-                Remove-Item -Path $path -Recurse -Force -ErrorAction Continue
-                Write-Log -Message "Installation directory removed: $path" -Level "INFO"
+                
+                # Try to remove with retry logic for locked files
+                $retryCount = 0
+                $maxRetries = 3
+                $removed = $false
+                
+                while ($retryCount -lt $maxRetries -and -not $removed)
+                {
+                    try
+                    {
+                        Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
+                        $removed = $true
+                        Write-Log -Message "Installation directory removed successfully: $path" -Level "INFO"
+                        $directoriesRemoved++
+                    }
+                    catch
+                    {
+                        $retryCount++
+                        if ($retryCount -lt $maxRetries)
+                        {
+                            Write-Log -Message "Retry $retryCount/$maxRetries removing $path`: $($_.Exception.Message)" -Level "WARNING"
+                            Start-Sleep -Seconds 2
+                        }
+                        else
+                        {
+                            Write-Log -Message "Failed to remove $path after $maxRetries attempts: $($_.Exception.Message)" -Level "ERROR"
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Write-Log -Message "Installation directory not found: $path" -Level "INFO"
             }
         }
+        
+        Write-Log -Message "File removal completed. Removed: $directoriesRemoved directories" -Level "INFO"
     }
     catch
     {
         Write-Log -Message "Error removing installation files: $( $_.Exception.Message )" -Level "ERROR"
+        throw
     }
 }
 
@@ -2301,48 +2411,203 @@ function Remove-ScheduledTasks
     try
     {
         $taskName = $script:Config.cleanup.taskName
+        $tasksRemoved = 0
+        
         $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 
         if ($task)
         {
-            Write-Log -Message "Removing scheduled task: $taskName" -Level "INFO"
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-            Write-Log -Message "Scheduled task removed: $taskName" -Level "INFO"
+            Write-Log -Message "Found scheduled task: $taskName (State: $($task.State))" -Level "INFO"
+            
+            try
+            {
+                Write-Log -Message "Removing scheduled task: $taskName" -Level "INFO"
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                Write-Log -Message "Scheduled task removed successfully: $taskName" -Level "INFO"
+                $tasksRemoved++
+            }
+            catch
+            {
+                Write-Log -Message "Failed to remove scheduled task $taskName`: $($_.Exception.Message)" -Level "ERROR"
+            }
         }
+        else
+        {
+            Write-Log -Message "Scheduled task not found: $taskName" -Level "INFO"
+        }
+        
+        Write-Log -Message "Scheduled task removal completed. Removed: $tasksRemoved tasks" -Level "INFO"
     }
     catch
     {
         Write-Log -Message "Error removing scheduled tasks: $( $_.Exception.Message )" -Level "ERROR"
+        throw
     }
 }
 
-function Start-Uninstall
+function Initialize-UninstallWindow
 {
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "iCamera Proxy Uninstaller"
+    $form.Size = New-Object System.Drawing.Size(800, 600)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = "Sizable"
+    $form.MinimumSize = New-Object System.Drawing.Size(600, 400)
+    $form.Icon = [System.Drawing.SystemIcons]::Warning
+
+    return $form
+}
+
+function Update-UninstallProgress
+{
+    param([int]$Step, [string]$Message, [int]$TotalSteps = 4)
+
+    $script:CurrentStep = $Step
+    $script:ProgressBar.Maximum = $TotalSteps
+    $script:ProgressBar.Value = $Step
+    $script:StatusLabel.Text = $Message
+    $script:StatusLabel.ForeColor = [System.Drawing.Color]::Black
+    $script:MainForm.Refresh()
+
+    Write-Log -Message "Uninstall Step $Step/$TotalSteps`: $Message" -Level "INFO"
+}
+
+function Start-UninstallProcess
+{
+    param([System.Windows.Forms.Button]$UninstallButton)
+
     Write-Log -Message "Starting iCamera Proxy uninstallation" -Level "INFO"
+
+    # Remove all buttons
+    $script:MainForm.Controls.Remove($UninstallButton)
+    $cancelButton = $script:MainForm.Controls | Where-Object { $_.Text -eq "Cancel" }
+    if ($cancelButton) { $script:MainForm.Controls.Remove($cancelButton) }
 
     try
     {
-        Write-Host "Uninstalling iCamera Proxy..." -ForegroundColor Yellow
-
-        # Remove services
-        Write-Host "Removing services..." -ForegroundColor Green
+        # Step 1: Remove services
+        Update-UninstallProgress -Step 1 -Message "Stopping and removing services..."
         Remove-Services
+        Start-Sleep -Milliseconds 1000
 
-        # Remove scheduled tasks
-        Write-Host "Removing scheduled tasks..." -ForegroundColor Green
+        # Step 2: Remove scheduled tasks
+        Update-UninstallProgress -Step 2 -Message "Removing scheduled tasks..."
         Remove-ScheduledTasks
+        Start-Sleep -Milliseconds 1000
 
-        # Remove installation files
-        Write-Host "Removing installation files..." -ForegroundColor Green
+        # Step 3: Remove installation files
+        Update-UninstallProgress -Step 3 -Message "Removing installation files..."
         Remove-InstallationFiles
+        Start-Sleep -Milliseconds 1000
+
+        # Step 4: Cleanup complete
+        Update-UninstallProgress -Step 4 -Message "Uninstallation completed successfully!"
 
         Write-Log -Message "Uninstallation completed successfully" -Level "INFO"
-        Write-Host "iCamera Proxy has been successfully uninstalled." -ForegroundColor Green
+
+        # Show success message
+        $successMsg = @"
+iCamera Proxy has been successfully uninstalled!
+
+The following items have been removed:
+• Windows Services (iCameraHSQLDB, iCameraProxy)
+• Installation files and directories
+• Scheduled tasks
+
+Log file: $script:LogFile
+"@
+
+        Show-Message -Message $successMsg -Title "Uninstallation Complete" -Icon ([System.Windows.Forms.MessageBoxIcon]::Information)
 
     }
     catch
     {
         $errorMsg = "Uninstallation failed: $( $_.Exception.Message )"
+        Write-Log -Message $errorMsg -Level "ERROR"
+
+        # Update status to show error
+        $script:StatusLabel.ForeColor = [System.Drawing.Color]::Red
+        $logFileName = if ($script:LogFile) { [System.IO.Path]::GetFileName($script:LogFile) } else { "uninstaller.log" }
+        $script:StatusLabel.Text = "ERROR: Uninstallation failed. Check log: $logFileName"
+        $script:MainForm.Refresh()
+
+        # Show error message
+        $failureMsg = @"
+iCamera Proxy uninstallation failed!
+
+Error: $errorMsg
+
+Please check the log file for details:
+$script:LogFile
+
+You may need to:
+1. Run the uninstaller as administrator
+2. Manually stop services before uninstalling
+3. Check if files are in use by other processes
+"@
+
+        Show-Error -Message $failureMsg -Title "Uninstallation Failed"
+    }
+}
+
+function Start-Uninstall
+{
+    Write-Log -Message "Initializing uninstall GUI" -Level "INFO"
+
+    try
+    {
+        # Initialize uninstall GUI
+        $script:MainForm = Initialize-UninstallWindow
+        $script:ProgressBar = Add-ProgressBar -Form $script:MainForm
+        $script:StatusLabel = Add-StatusLabel -Form $script:MainForm
+        $script:StatusLabel.Text = "Ready to uninstall iCamera Proxy..."
+
+        # Add log display
+        $script:LogDisplay = Add-LogDisplay -Form $script:MainForm
+
+        # Add warning message
+        $warningLabel = New-Object System.Windows.Forms.Label
+        $warningLabel.Location = New-Object System.Drawing.Point(20, 520)
+        $warningLabel.Size = New-Object System.Drawing.Size(500, 40)
+        $warningLabel.Anchor = "Bottom,Left,Right"
+        $warningLabel.Text = "⚠️ This will permanently remove iCamera Proxy and all its components from your system."
+        $warningLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        $warningLabel.ForeColor = [System.Drawing.Color]::DarkRed
+        $script:MainForm.Controls.Add($warningLabel)
+
+        # Add uninstall button
+        $uninstallButton = New-Object System.Windows.Forms.Button
+        $uninstallButton.Location = New-Object System.Drawing.Point(550, 520)
+        $uninstallButton.Size = New-Object System.Drawing.Size(120, 35)
+        $uninstallButton.Anchor = "Bottom,Right"
+        $uninstallButton.Text = "Uninstall"
+        $uninstallButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        $uninstallButton.BackColor = [System.Drawing.Color]::FromArgb(220, 53, 69)  # Bootstrap danger red
+        $uninstallButton.ForeColor = [System.Drawing.Color]::White
+        $uninstallButton.FlatStyle = "Flat"
+        $uninstallButton.Add_Click({ Start-UninstallProcess -UninstallButton $uninstallButton })
+        $script:MainForm.Controls.Add($uninstallButton)
+
+        # Add cancel button
+        $cancelButton = New-Object System.Windows.Forms.Button
+        $cancelButton.Location = New-Object System.Drawing.Point(680, 520)
+        $cancelButton.Size = New-Object System.Drawing.Size(80, 35)
+        $cancelButton.Anchor = "Bottom,Right"
+        $cancelButton.Text = "Cancel"
+        $cancelButton.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+        $cancelButton.BackColor = [System.Drawing.Color]::LightGray
+        $cancelButton.ForeColor = [System.Drawing.Color]::Black
+        $cancelButton.FlatStyle = "Flat"
+        $cancelButton.Add_Click({ $script:MainForm.Close() })
+        $script:MainForm.Controls.Add($cancelButton)
+
+        # Show form
+        [System.Windows.Forms.Application]::Run($script:MainForm)
+
+    }
+    catch
+    {
+        $errorMsg = "Failed to initialize uninstaller: $( $_.Exception.Message )"
         Write-Log -Message $errorMsg -Level "ERROR"
         Write-Host $errorMsg -ForegroundColor Red
         exit 1
@@ -2376,13 +2641,16 @@ function Main
             if (-not (Test-AdminRights))
             {
                 Write-Log -Message "Requesting admin elevation for uninstall" -Level "INFO"
-                Request-AdminElevation
+                # Pass the -Uninstall parameter when elevating
+                $scriptPath = $MyInvocation.ScriptName
+                Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`" -Uninstall" -Verb RunAs
+                exit 0
             }
 
             # Load configuration
             $script:Config = Get-Configuration
 
-            # Run uninstall
+            # Run uninstall with GUI
             Start-Uninstall
             return
         }

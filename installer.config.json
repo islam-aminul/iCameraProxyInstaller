@@ -123,7 +123,7 @@
     "appScript": "CameraProxy.sql",
     "queries": {
       "installInfo": "SELECT id AS proxy_id, proxy_name FROM public.mspgbl_camera_proxy;",
-      "fileCatalystCheck": "SELECT CASE WHEN COUNT(*) > 0 THEN 'TRUE' ELSE 'FALSE' END AS install_fc_hotfolder FROM public.msp_camera_adapter WHERE adapter_impl_id_fk = 1017;"
+      "fileCatalystCheck": "SELECT CASE WHEN COUNT(*) > 0 THEN 'TRUE' ELSE 'FALSE' END AS install_fc_hotfolder FROM public.msp_camera_adapter WHERE adapter_impl_id_fk = 10171;"
     }
   },
   "filecatalyst": {
