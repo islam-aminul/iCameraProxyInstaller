@@ -1501,7 +1501,7 @@ function Invoke-Step8 {
         }
         
         # Create logs directory
-        $logsPath = Join-Path $appPath "logs"
+        $logsPath = Join-Path $appPath $appConfig.logsFolder
         New-Item -Path $logsPath -ItemType Directory -Force | Out-Null
         Write-Log -Message "Created logs directory: $logsPath" -Level "INFO"
         
@@ -1532,9 +1532,11 @@ function Register-WindowsService {
         $javaPath = Join-Path $InstallPath "$jreFolder\bin\java.exe"
         $hsqldbJar = Join-Path $InstallPath "$hsqldbFolder\hsqldb\lib\hsqldb.jar"
         
-        # Expand path placeholders - use hsqldb folder as working directory
-        $hsqldbPath = Join-Path $InstallPath $hsqldbFolder
-        $workingDir = $hsqldbPath
+        # Expand path placeholders from service configuration
+        $workingDir = $ServiceConfig.workingDirectory -replace "\{install_path\}", $InstallPath
+        $workingDir = $workingDir -replace "\{hsqldb_folder\}", $script:Config.dependencies.packages.hsqldb.targetSubfolder
+        $workingDir = $workingDir -replace "\{proxy_folder\}", $script:Config.application.destinationFolder
+        $workingDir = $workingDir -replace "\{logs_folder\}", $script:Config.application.logsFolder
         $stdOutput = Join-Path $InstallPath ($ServiceConfig.stdOutput -replace "\{install_path\}", $InstallPath)
         $stdError = Join-Path $InstallPath ($ServiceConfig.stdError -replace "\{install_path\}", $InstallPath)
         
@@ -1581,9 +1583,18 @@ function Register-WindowsService {
             "--ServiceUser=LocalSystem"
         )
         
-        # Add JVM options
+        # Add JVM options with path expansion
         if ($ServiceConfig.jvmOptions) {
-            $jvmOpts = $ServiceConfig.jvmOptions -join ';'
+            $expandedJvmOpts = @()
+            foreach ($opt in $ServiceConfig.jvmOptions) {
+                $expandedOpt = $opt -replace "\{install_path\}", $InstallPath
+                $expandedOpt = $expandedOpt -replace "\{hsqldb_folder\}", $script:Config.dependencies.packages.hsqldb.targetSubfolder
+                $expandedOpt = $expandedOpt -replace "\{ffmpeg_folder\}", $script:Config.dependencies.packages.ffmpeg.targetSubfolder
+                $expandedOpt = $expandedOpt -replace "\{proxy_folder\}", $script:Config.application.destinationFolder
+                $expandedOpt = $expandedOpt -replace "\{logs_folder\}", $script:Config.application.logsFolder
+                $expandedJvmOpts += $expandedOpt
+            }
+            $jvmOpts = $expandedJvmOpts -join ';'
             $updateArgs += "--JvmOptions=$jvmOpts"
         }
         
@@ -1593,6 +1604,8 @@ function Register-WindowsService {
             foreach ($arg in $ServiceConfig.arguments) {
                 $expandedArg = $arg -replace "\{install_path\}", $InstallPath
                 $expandedArg = $expandedArg -replace "\{hsqldb_folder\}", $script:Config.dependencies.packages.hsqldb.targetSubfolder
+                $expandedArg = $expandedArg -replace "\{proxy_folder\}", $script:Config.application.destinationFolder
+                $expandedArg = $expandedArg -replace "\{logs_folder\}", $script:Config.application.logsFolder
                 $expandedArgs += $expandedArg
             }
             $startArgs = $expandedArgs -join ';'
@@ -1609,6 +1622,9 @@ function Register-WindowsService {
             $envVars = @()
             foreach ($key in $ServiceConfig.environmentVars.Keys) {
                 $value = $ServiceConfig.environmentVars[$key] -replace "\{install_path\}", $InstallPath
+                $value = $value -replace "\{proxy_folder\}", $script:Config.application.destinationFolder
+                $value = $value -replace "\{logs_folder\}", $script:Config.application.logsFolder
+                $value = $value -replace "\{ffmpeg_folder\}", $script:Config.dependencies.packages.ffmpeg.targetSubfolder
                 $envVars += "$key=$value"
             }
             if ($envVars.Count -gt 0) {
