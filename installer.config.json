@@ -164,7 +164,6 @@
       "name": "iCameraHSQLDB",
       "displayName": "iCamera HSQLDB Service",
       "description": "HSQLDB database service for iCamera Proxy",
-      "executable": "prunsrv.exe",
       "startMode": "auto",
       "workingDirectory": "{install_path}\\{hsqldb_folder}",
       "jvmOptions": [
@@ -178,15 +177,14 @@
       ],
       "stdOutput": "{logs_folder}\\hsqldb-stdout.log",
       "stdError": "{logs_folder}\\hsqldb-stderr.log",
-      "restartDelay": 5000,
+      "restartDelay": 60000,
       "maxRestartAttempts": 3,
-      "resetInterval": 300000
+      "resetInterval": 3600
     },
     "icameraproxy": {
       "name": "iCameraProxy",
       "displayName": "iCamera Proxy Service",
       "description": "iCamera Proxy application service",
-      "executable": "prunsrv.exe",
       "startMode": "auto",
       "dependsOn": "iCameraHSQLDB",
       "workingDirectory": "{install_path}\\{proxy_folder}",
@@ -208,13 +206,13 @@
         "ICAMERA_PROXY_HOME": "{install_path}\\{proxy_folder}",
         "FFMPEG_HOME": "{install_path}\\ffmpeg\\bin"
       },
-      "mainClass": "com.icamera.proxy.Main",
+      "mainClass": "com.cameraproxy.CameraProxy",
       "jarFile": "CameraProxy.jar",
       "stdOutput": "{logs_folder}\\icamera-stdout.log",
       "stdError": "{logs_folder}\\icamera-stderr.log",
-      "restartDelay": 10000,
+      "restartDelay": 60000,
       "maxRestartAttempts": 5,
-      "resetInterval": 600000
+      "resetInterval": 3600
     }
   }
 }

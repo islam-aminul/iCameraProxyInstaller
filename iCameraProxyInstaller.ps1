@@ -287,6 +287,7 @@ function Get-UserInput
 {
     param([string]$Prompt, [string]$Title = "Input Required", [string]$DefaultValue = "")
 
+    Add-Type -AssemblyName Microsoft.VisualBasic
     return [Microsoft.VisualBasic.Interaction]::InputBox($Prompt, $Title, $DefaultValue)
 }
 
@@ -329,6 +330,58 @@ function Invoke-Step2
 
     try
     {
+        # Stop existing services if running
+        try {
+            $hsqldbService = $script:Config.services.hsqldb.name
+            $proxyService = $script:Config.services.icameraproxy.name
+            
+            Write-Log -Message "Checking for existing services: $proxyService, $hsqldbService" -Level "INFO"
+            
+            $service = Get-Service -Name $proxyService -ErrorAction SilentlyContinue
+            if ($service) {
+                Write-Log -Message "Found $proxyService service (Status: $($service.Status))" -Level "INFO"
+                if ($service.Status -eq 'Running') {
+                    Write-Log -Message "Stopping existing $proxyService service" -Level "INFO"
+                    Stop-Service -Name $proxyService -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 3
+                    Write-Log -Message "Service $proxyService stopped" -Level "INFO"
+                }
+            } else {
+                Write-Log -Message "Service $proxyService not found" -Level "INFO"
+            }
+            
+            $service = Get-Service -Name $hsqldbService -ErrorAction SilentlyContinue
+            if ($service) {
+                Write-Log -Message "Found $hsqldbService service (Status: $($service.Status))" -Level "INFO"
+                if ($service.Status -eq 'Running') {
+                    Write-Log -Message "Stopping existing $hsqldbService service" -Level "INFO"
+                    Stop-Service -Name $hsqldbService -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 3
+                    Write-Log -Message "Service $hsqldbService stopped" -Level "INFO"
+                }
+            } else {
+                Write-Log -Message "Service $hsqldbService not found" -Level "INFO"
+            }
+            
+            # Kill only iCamera Java processes from previous installation
+            Write-Log -Message "Checking for iCamera Java processes" -Level "INFO"
+            $javaProcesses = Get-Process -Name "java" -ErrorAction SilentlyContinue | Where-Object { 
+                $_.CommandLine -like "*iCamera*" -or 
+                $_.CommandLine -like "*hsqldb*" -or 
+                $_.CommandLine -like "*CameraProxy*"
+            }
+            if ($javaProcesses) {
+                Write-Log -Message "Found $($javaProcesses.Count) iCamera Java processes, terminating" -Level "INFO"
+                $javaProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            } else {
+                Write-Log -Message "No iCamera Java processes found" -Level "INFO"
+            }
+            
+        } catch {
+            Write-Log -Message "Could not stop existing services: $($_.Exception.Message)" -Level "WARNING"
+        }
+
         # Get scheduled task info
         $taskName = $script:Config.cleanup.taskName
         $folderName = $script:Config.cleanup.folderName
@@ -421,36 +474,56 @@ function Invoke-Step3
             Write-Log -Message "Multiple drives available: $( $driveList -join ', ' )" -Level "INFO"
             Write-Log -Message "Recommended drive (most free space): $( $recommendedDrive.DeviceID )" -Level "INFO"
 
-            # Prompt user for drive selection
-            $driveOptions = $drives | ForEach-Object { $_.DeviceID }
-            $prompt = "Select installation drive:`n`n" + ($driveList -join "`n") + "`n`nRecommended: $( $recommendedDrive.DeviceID )"
+            # Create drive selection form
+            $driveForm = New-Object System.Windows.Forms.Form
+            $driveForm.Text = "Drive Selection"
+            $driveForm.Size = New-Object System.Drawing.Size(400, 200)
+            $driveForm.StartPosition = "CenterParent"
+            $driveForm.FormBorderStyle = "FixedDialog"
+            $driveForm.MaximizeBox = $false
+            $driveForm.MinimizeBox = $false
 
-            do
-            {
-                $userInput = Get-UserInput -Prompt $prompt -Title "Drive Selection" -DefaultValue $recommendedDrive.DeviceID
+            $label = New-Object System.Windows.Forms.Label
+            $label.Location = New-Object System.Drawing.Point(20, 20)
+            $label.Size = New-Object System.Drawing.Size(350, 40)
+            $label.Text = "Select installation drive:`n`nRecommended: $( $recommendedDrive.DeviceID ) (Most free space)"
+            $driveForm.Controls.Add($label)
 
-                if ( [string]::IsNullOrWhiteSpace($userInput))
-                {
-                    Write-Log -Message "User cancelled drive selection" -Level "WARNING"
-                    throw "Drive selection cancelled by user"
+            $comboBox = New-Object System.Windows.Forms.ComboBox
+            $comboBox.Location = New-Object System.Drawing.Point(20, 70)
+            $comboBox.Size = New-Object System.Drawing.Size(350, 25)
+            $comboBox.DropDownStyle = "DropDownList"
+            foreach ($drive in $drives) {
+                $item = "$($drive.DeviceID) - Free: $([math]::Round($drive.FreeSpace/1GB, 2)) GB"
+                $comboBox.Items.Add($item)
+                if ($drive.DeviceID -eq $recommendedDrive.DeviceID) {
+                    $comboBox.SelectedItem = $item
                 }
+            }
+            $driveForm.Controls.Add($comboBox)
 
-                $selectedDrive = $userInput.ToUpper().TrimEnd(':')
-                if ($selectedDrive -notlike "*:")
-                {
-                    $selectedDrive += ":"
-                }
+            $okButton = New-Object System.Windows.Forms.Button
+            $okButton.Location = New-Object System.Drawing.Point(215, 110)
+            $okButton.Size = New-Object System.Drawing.Size(75, 25)
+            $okButton.Text = "OK"
+            $okButton.DialogResult = "OK"
+            $driveForm.Controls.Add($okButton)
 
-                if ($selectedDrive -in $driveOptions)
-                {
-                    Write-Log -Message "User selected drive: $selectedDrive" -Level "INFO"
-                    break
-                }
-                else
-                {
-                    Show-Warning -Message "Invalid drive selection. Please choose from available drives."
-                }
-            } while ($true)
+            $cancelButton = New-Object System.Windows.Forms.Button
+            $cancelButton.Location = New-Object System.Drawing.Point(295, 110)
+            $cancelButton.Size = New-Object System.Drawing.Size(75, 25)
+            $cancelButton.Text = "Cancel"
+            $cancelButton.DialogResult = "Cancel"
+            $driveForm.Controls.Add($cancelButton)
+
+            $result = $driveForm.ShowDialog()
+            if ($result -eq "OK" -and $comboBox.SelectedItem) {
+                $selectedDrive = $comboBox.SelectedItem.ToString().Split(' ')[0]
+                Write-Log -Message "User selected drive: $selectedDrive" -Level "INFO"
+            } else {
+                Write-Log -Message "User cancelled drive selection" -Level "WARNING"
+                throw "Drive selection cancelled by user"
+            }
         }
 
         # Create installation path
@@ -998,12 +1071,7 @@ function Invoke-Step5
             # Remove existing target folder for clean re-install
             if (Test-Path $targetPath)
             {
-                # Stop any processes using files in target path
-                if ($depConfig.name -like "*procrun*" -or $depConfig.name -like "*daemon*")
-                {
-                    Get-Process | Where-Object { $_.Path -like "$targetPath\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-                    Start-Sleep -Seconds 2
-                }
+                # Services already stopped in Step 2 cleanup
 
                 # Try to remove with retry logic
                 $retryCount = 0
@@ -1125,6 +1193,7 @@ function Create-ServerProperties
 server.database.0=file:$unixDataPath/$DatabaseName
 server.dbname.0=$DatabaseName
 server.port=$Port
+server.silent=false
 "@
 
     # Use ASCII encoding to avoid BOM issues
@@ -1821,6 +1890,92 @@ function Invoke-Step8
         # Set ACL permissions for logs directory
         Set-DirectoryPermissions -Path $logsPath
 
+        # Create management batch scripts
+        $hsqldbService = $script:Config.services.hsqldb.name
+        $proxyService = $script:Config.services.icameraproxy.name
+        $connectivityUrls = $script:Config.requirements.connectivityUrls -join "' '" 
+        
+        $batchScripts = @{
+            "start-services.bat" = @"
+@echo off
+powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0scripts\start-services.ps1\"' -Verb RunAs"
+"@
+            "stop-services.bat" = @"
+@echo off
+powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0scripts\stop-services.ps1\"' -Verb RunAs"
+"@
+            "start-services.ps1" = @"
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
+    Write-Host 'Requesting administrator privileges...' -ForegroundColor Yellow
+    Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"`$PSCommandPath\"' -Verb RunAs
+    exit
+}
+
+Write-Host 'Starting iCamera Proxy Services...' -ForegroundColor Green
+try {
+    Start-Service -Name '$hsqldbService'
+    Write-Host 'Started: $hsqldbService' -ForegroundColor Green
+    Start-Service -Name '$proxyService'
+    Write-Host 'Started: $proxyService' -ForegroundColor Green
+    Write-Host 'All services started successfully!' -ForegroundColor Green
+} catch {
+    Write-Host 'Error: `$(`$_.Exception.Message)' -ForegroundColor Red
+}
+Write-Host 'Press any key to exit...'
+`$null = `$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+"@
+            "stop-services.ps1" = @"
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
+    Write-Host 'Requesting administrator privileges...' -ForegroundColor Yellow
+    Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File \"`$PSCommandPath\"' -Verb RunAs
+    exit
+}
+
+Write-Host 'Stopping iCamera Proxy Services...' -ForegroundColor Yellow
+try {
+    Stop-Service -Name '$proxyService' -Force
+    Write-Host 'Stopped: $proxyService' -ForegroundColor Yellow
+    Stop-Service -Name '$hsqldbService' -Force
+    Write-Host 'Stopped: $hsqldbService' -ForegroundColor Yellow
+    Write-Host 'All services stopped successfully!' -ForegroundColor Green
+} catch {
+    Write-Host 'Error: `$(`$_.Exception.Message)' -ForegroundColor Red
+}
+Write-Host 'Press any key to exit...'
+`$null = `$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+"@
+            "status-check.bat" = @"
+@echo off
+echo === iCamera Proxy Status Check ===
+echo.
+echo Service Status:
+sc query $hsqldbService | findstr STATE
+sc query $proxyService | findstr STATE
+echo.
+echo Database Connection Test:
+powershell -Command "try { `$tcp = New-Object System.Net.Sockets.TcpClient; `$tcp.Connect('localhost', $script:DatabasePort); `$tcp.Close(); Write-Host 'Database: ONLINE (Port $script:DatabasePort)' -ForegroundColor Green } catch { Write-Host 'Database: OFFLINE' -ForegroundColor Red }"
+echo.
+echo Connectivity URL Checks:
+powershell -Command "@('$($script:Config.requirements.connectivityUrls -join "','")') | ForEach-Object { try { Invoke-WebRequest -Uri `$_ -TimeoutSec 5 -UseBasicParsing | Out-Null; Write-Host "`$_`: ONLINE" -ForegroundColor Green } catch { Write-Host "`$_`: OFFLINE" -ForegroundColor Red } }"
+echo.
+pause
+"@
+        }
+        
+        # Create scripts subfolder at install root
+        $scriptsPath = Join-Path $script:InstallPath "scripts"
+        New-Item -Path $scriptsPath -ItemType Directory -Force | Out-Null
+        
+        foreach ($scriptName in $batchScripts.Keys) {
+            if ($scriptName -like "*.ps1") {
+                $scriptPath = Join-Path $scriptsPath $scriptName
+            } else {
+                $scriptPath = Join-Path $script:InstallPath $scriptName
+            }
+            [System.IO.File]::WriteAllText($scriptPath, $batchScripts[$scriptName], [System.Text.Encoding]::ASCII)
+            Write-Log -Message "Created management script: $scriptName" -Level "INFO"
+        }
+
         Write-Log -Message "Application setup completed successfully" -Level "INFO"
 
     }
@@ -1841,7 +1996,7 @@ function Register-WindowsService
         $jreFolder = $script:Config.dependencies.packages.jre.targetSubfolder
         $hsqldbFolder = $script:Config.dependencies.packages.hsqldb.targetSubfolder
 
-        $procrunPath = Join-Path $InstallPath "$procrunFolder\prunsrv.exe"
+        $procrunPath = Join-Path $InstallPath "$procrunFolder\amd64\prunsrv.exe"
         $javaPath = Join-Path $InstallPath "$jreFolder\bin\java.exe"
         $hsqldbJar = Join-Path $InstallPath "$hsqldbFolder\hsqldb\lib\hsqldb.jar"
 
@@ -1966,8 +2121,8 @@ function Register-WindowsService
         if ($ServiceConfig.jarFile)
         {
             $jarPath = Join-Path $workingDir $ServiceConfig.jarFile
-            $updateArgs = $updateArgs | Where-Object { $_ -notlike "--Classpath=*" }
-            $updateArgs += "--Classpath=$jarPath"
+            $updateArgs = $updateArgs | Where-Object { $_ -notlike "--Classpath=*" -and $_ -notlike "--StartClass=*" }
+            $updateArgs += "--Jar=$jarPath"
         }
 
         Write-Log -Message "Updating service configuration: $( $ServiceConfig.name )" -Level "INFO"
@@ -1979,12 +2134,11 @@ function Register-WindowsService
             throw "Service configuration update failed with exit code: $LASTEXITCODE"
         }
 
-        # Configure failure recovery
-        $scArgs = @(
-            "failure", $ServiceConfig.name, "reset=", $ServiceConfig.resetInterval, "actions=", "restart/$( $ServiceConfig.restartDelay )/restart/$( $ServiceConfig.restartDelay * 2 )/restart/$( $ServiceConfig.restartDelay * 3 )"
-        )
+        # Set service to start automatically
+        & sc.exe config $ServiceConfig.name start= auto | Out-Null
 
-        & sc.exe $scArgs | Out-Null
+        # Configure failure recovery using config values
+        & sc.exe failure $ServiceConfig.name reset= $ServiceConfig.resetInterval actions= restart/$($ServiceConfig.restartDelay)/restart/$($ServiceConfig.restartDelay)/restart/$($ServiceConfig.restartDelay) | Out-Null
 
         Write-Log -Message "Service $( $ServiceConfig.name ) registered successfully" -Level "INFO"
         return $true
@@ -2015,11 +2169,13 @@ function Invoke-Step9
 
         # Register iCamera Proxy service (depends on HSQLDB)
         Write-Log -Message "Registering iCamera Proxy service" -Level "INFO"
-        if (-not (Register-WindowsService -ServiceName "icameraproxy" -ServiceConfig $servicesConfig.icameraproxy -InstallPath $script:InstallPath))
+        $proxyRegistered = Register-WindowsService -ServiceName "icameraproxy" -ServiceConfig $servicesConfig.icameraproxy -InstallPath $script:InstallPath
+        
+        if (-not $proxyRegistered)
         {
             throw "Failed to register iCamera Proxy service"
         }
-
+        
         Write-Log -Message "Service registration completed successfully" -Level "INFO"
 
     }
@@ -2156,18 +2312,23 @@ function Invoke-Step10
             Write-Log -Message "Installation completed successfully at: $endTime" -Level "INFO"
             Write-Log -Message "Installation log file: $script:LogFile" -Level "INFO"
 
+            # Update status to green success message
+            $script:StatusLabel.ForeColor = [System.Drawing.Color]::Green
+            $script:StatusLabel.Text = "Installation completed successfully! Services are running."
+            $script:MainForm.Refresh()
+
             # Show success message to user
             $successMsg = @"
 iCamera Proxy installation completed successfully!
 
 Services Status:
-✓ HSQLDB Service ($hsqldbService): Running
-✓ iCamera Proxy Service ($proxyService): Running
+- HSQLDB Service ($hsqldbService): Running
+- iCamera Proxy Service ($proxyService): Running
 
 Installation Details:
-• Installation Path: $script:InstallPath
-• Database Port: $script:DatabasePort
-• Log File: $script:LogFile
+- Installation Path: $script:InstallPath
+- Database Port: $script:DatabasePort
+- Log File: $script:LogFile
 
 Both services are configured to start automatically on system boot.
 "@
@@ -2273,8 +2434,19 @@ function Remove-Services
             if ($service.Status -ne 'Stopped')
             {
                 Write-Log -Message "Stopping service: $proxyService" -Level "INFO"
-                Stop-Service -Name $proxyService -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 3
+                & sc.exe stop $proxyService | Out-Null
+                
+                # Wait up to 30 seconds for service to stop
+                $timeout = 30
+                while ($timeout -gt 0 -and (Get-Service -Name $proxyService -ErrorAction SilentlyContinue).Status -ne 'Stopped') {
+                    Start-Sleep -Seconds 1
+                    $timeout--
+                }
+                
+                if ((Get-Service -Name $proxyService -ErrorAction SilentlyContinue).Status -ne 'Stopped') {
+                    Write-Log -Message "Force killing service: $proxyService" -Level "WARNING"
+                    & taskkill /F /FI "SERVICES eq $proxyService" 2>$null
+                }
             }
             
             Write-Log -Message "Removing service: $proxyService" -Level "INFO"
@@ -2304,8 +2476,19 @@ function Remove-Services
             if ($service.Status -ne 'Stopped')
             {
                 Write-Log -Message "Stopping service: $hsqldbService" -Level "INFO"
-                Stop-Service -Name $hsqldbService -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 3
+                & sc.exe stop $hsqldbService | Out-Null
+                
+                # Wait up to 30 seconds for service to stop
+                $timeout = 30
+                while ($timeout -gt 0 -and (Get-Service -Name $hsqldbService -ErrorAction SilentlyContinue).Status -ne 'Stopped') {
+                    Start-Sleep -Seconds 1
+                    $timeout--
+                }
+                
+                if ((Get-Service -Name $hsqldbService -ErrorAction SilentlyContinue).Status -ne 'Stopped') {
+                    Write-Log -Message "Force killing service: $hsqldbService" -Level "WARNING"
+                    & taskkill /F /FI "SERVICES eq $hsqldbService" 2>$null
+                }
             }
             
             Write-Log -Message "Removing service: $hsqldbService" -Level "INFO"
@@ -2338,11 +2521,36 @@ function Remove-InstallationFiles
 {
     try
     {
-        # Find installation directories
-        $possiblePaths = @("C:\iCamera", "D:\iCamera", "E:\iCamera", "F:\iCamera")
+        # Get installation path from service configuration
+        $installPaths = @()
+        
+        # Try to get path from service registry
+        try {
+            $hsqldbService = $script:Config.services.hsqldb.name
+            $serviceKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$hsqldbService\Parameters"
+            if (Test-Path $serviceKey) {
+                $startPath = (Get-ItemProperty -Path $serviceKey -Name "StartPath" -ErrorAction SilentlyContinue).StartPath
+                if ($startPath) {
+                    $installPaths += $startPath
+                    Write-Log -Message "Found installation path from service registry: $startPath" -Level "INFO"
+                }
+            }
+        } catch {
+            Write-Log -Message "Could not read service registry path" -Level "WARNING"
+        }
+        
+        # Fallback to config-based search
+        $directoryName = $script:Config.installation.directoryName
+        $drives = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
+        foreach ($drive in $drives) {
+            $configPath = Join-Path $drive.DeviceID $directoryName
+            if (Test-Path $configPath) {
+                $installPaths += $configPath
+            }
+        }
+        
         $directoriesRemoved = 0
-
-        foreach ($path in $possiblePaths)
+        foreach ($path in ($installPaths | Select-Object -Unique))
         {
             if (Test-Path $path)
             {
@@ -2390,10 +2598,6 @@ function Remove-InstallationFiles
                         }
                     }
                 }
-            }
-            else
-            {
-                Write-Log -Message "Installation directory not found: $path" -Level "INFO"
             }
         }
         
@@ -2510,9 +2714,9 @@ function Start-UninstallProcess
 iCamera Proxy has been successfully uninstalled!
 
 The following items have been removed:
-• Windows Services (iCameraHSQLDB, iCameraProxy)
-• Installation files and directories
-• Scheduled tasks
+- Windows Services (iCameraHSQLDB, iCameraProxy)
+- Installation files and directories
+- Scheduled tasks
 
 Log file: $script:LogFile
 "@
