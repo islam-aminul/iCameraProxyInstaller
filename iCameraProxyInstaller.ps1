@@ -2121,8 +2121,8 @@ function Register-WindowsService
         if ($ServiceConfig.jarFile)
         {
             $jarPath = Join-Path $workingDir $ServiceConfig.jarFile
-            $updateArgs = $updateArgs | Where-Object { $_ -notlike "--Classpath=*" -and $_ -notlike "--StartClass=*" }
-            $updateArgs += "--Jar=$jarPath"
+            $updateArgs = $updateArgs | Where-Object { $_ -notlike "--Classpath=*" }
+            $updateArgs += "--Classpath=$jarPath"
         }
 
         Write-Log -Message "Updating service configuration: $( $ServiceConfig.name )" -Level "INFO"
@@ -2137,8 +2137,11 @@ function Register-WindowsService
         # Set service to start automatically
         & sc.exe config $ServiceConfig.name start= auto | Out-Null
 
-        # Configure failure recovery using config values
-        & sc.exe failure $ServiceConfig.name reset= $ServiceConfig.resetInterval actions= restart/$($ServiceConfig.restartDelay)/restart/$($ServiceConfig.restartDelay)/restart/$($ServiceConfig.restartDelay) | Out-Null
+        # Configure failure recovery with three different thresholds
+        $delay1 = $ServiceConfig.restartDelay
+        $delay2 = $ServiceConfig.restartDelay * 2
+        $delay3 = $ServiceConfig.restartDelay * 3
+        & sc.exe failure $ServiceConfig.name reset= $ServiceConfig.resetInterval actions= restart/$delay1/restart/$delay2/restart/$delay3 | Out-Null
 
         Write-Log -Message "Service $( $ServiceConfig.name ) registered successfully" -Level "INFO"
         return $true
