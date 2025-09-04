@@ -1933,10 +1933,16 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 Write-Host 'Stopping iCamera Proxy Services...' -ForegroundColor Yellow
 try {
-    Stop-Service -Name '$proxyService' -Force
+    Write-Host 'Stopping $proxyService...' -ForegroundColor Yellow
+    & sc.exe stop '$proxyService' | Out-Null
+    Start-Sleep -Seconds 5
     Write-Host 'Stopped: $proxyService' -ForegroundColor Yellow
-    Stop-Service -Name '$hsqldbService' -Force
+    
+    Write-Host 'Stopping $hsqldbService...' -ForegroundColor Yellow
+    & sc.exe stop '$hsqldbService' | Out-Null
+    Start-Sleep -Seconds 5
     Write-Host 'Stopped: $hsqldbService' -ForegroundColor Yellow
+    
     Write-Host 'All services stopped successfully!' -ForegroundColor Green
 } catch {
     Write-Host 'Error: `$(`$_.Exception.Message)' -ForegroundColor Red
@@ -1949,9 +1955,9 @@ Write-Host 'Press any key to exit...'
 echo === iCamera Proxy Status Check ===
 echo.
 echo Service Status:
-echo $hsqldbService:
+echo $hsqldbService :
 sc query $hsqldbService | findstr STATE
-echo $proxyService:
+echo $proxyService :
 sc query $proxyService | findstr STATE
 echo.
 echo Database Connection Test:
