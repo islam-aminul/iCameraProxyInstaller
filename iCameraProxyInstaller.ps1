@@ -1949,14 +1949,16 @@ Write-Host 'Press any key to exit...'
 echo === iCamera Proxy Status Check ===
 echo.
 echo Service Status:
+echo $hsqldbService:
 sc query $hsqldbService | findstr STATE
+echo $proxyService:
 sc query $proxyService | findstr STATE
 echo.
 echo Database Connection Test:
 powershell -Command "try { `$tcp = New-Object System.Net.Sockets.TcpClient; `$tcp.Connect('localhost', $script:DatabasePort); `$tcp.Close(); Write-Host 'Database: ONLINE (Port $script:DatabasePort)' -ForegroundColor Green } catch { Write-Host 'Database: OFFLINE' -ForegroundColor Red }"
 echo.
 echo Connectivity URL Checks:
-powershell -Command "@('$($script:Config.requirements.connectivityUrls -join "','")') | ForEach-Object { try { Invoke-WebRequest -Uri `$_ -TimeoutSec 5 -UseBasicParsing | Out-Null; Write-Host "`$_`: ONLINE" -ForegroundColor Green } catch { Write-Host "`$_`: OFFLINE" -ForegroundColor Red } }"
+powershell -Command "@('$($script:Config.requirements.connectivityUrls -join "','")') | ForEach-Object { try { Invoke-WebRequest -Uri `$_ -TimeoutSec 5 -UseBasicParsing | Out-Null; Write-Host \"`$_ : ONLINE\" -ForegroundColor Green } catch { Write-Host \"`$_ : OFFLINE\" -ForegroundColor Red } }"
 echo.
 pause
 "@
